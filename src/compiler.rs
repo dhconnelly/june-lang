@@ -22,7 +22,7 @@ pub struct Compiler;
 pub fn compile(p: impl AsRef<Path>) -> Result<()> {
     let f = File::open(p)?;
     let scan = scanner::scan(BufReader::new(f));
-    let toks = scan.collect::<scanner::Result<Vec<_>>>()?;
+    let toks = scan.collect::<result::Result<Vec<_>, scanner::Error>>()?;
     for tok in toks {
         println!("{:?}", tok);
     }
