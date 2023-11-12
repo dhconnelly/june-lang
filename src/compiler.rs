@@ -1,3 +1,4 @@
+use crate::parser;
 use crate::scanner;
 use std::fs::File;
 use std::io;
@@ -13,6 +14,9 @@ pub enum Error {
 
     #[error("scanner: {0}")]
     ScannerError(#[from] scanner::ScannerError),
+
+    #[error("parser: {0}")]
+    ParserError(#[from] parser::ParserError),
 }
 
 type Result<T> = result::Result<T, Error>;
@@ -22,10 +26,7 @@ pub struct Compiler;
 pub fn compile(p: impl AsRef<Path>) -> Result<()> {
     let f = File::open(p)?;
     let scan = scanner::scan(BufReader::new(f));
-    let toks =
-        scan.collect::<result::Result<Vec<_>, scanner::ScannerError>>()?;
-    for tok in toks {
-        println!("{:?}", tok);
-    }
+    let ast = parser::parse(scan)?;
+    println!("{:?}", ast);
     Ok(())
 }
