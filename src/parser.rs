@@ -58,7 +58,7 @@ mod test {
                         line: 2,
                         col: 20,
                         name: String::from("s"),
-                        typ: Type::Str,
+                        typ: String::from("str"),
                     }],
                     body: Block(vec![Stmt::ExprStmt(Expr::CallExpr(Call {
                         line: 3,

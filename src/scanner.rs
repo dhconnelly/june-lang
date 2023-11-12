@@ -28,7 +28,10 @@ pub struct Scanner<R: io::BufRead> {
 }
 
 fn is_delim(b: u8) -> bool {
-    matches!(b, b'(' | b')' | b'{' | b'}' | b',' | b';' | b'\n' | b' ')
+    matches!(
+        b,
+        b'(' | b')' | b'{' | b'}' | b',' | b';' | b'\n' | b' ' | b':'
+    )
 }
 
 fn ident_type(s: &str) -> TokenType {
@@ -125,6 +128,7 @@ impl<R: io::BufRead> iter::Iterator for Scanner<R> {
                 b'}' => self.symbol(TokenType::Rbrace),
                 b',' => self.symbol(TokenType::Comma),
                 b';' => self.symbol(TokenType::Semi),
+                b':' => self.symbol(TokenType::Colon),
                 b'"' => self.str(),
                 b if b.is_ascii_alphabetic() => self.keyword_or_ident(),
                 b => Err(Error::UnknownToken(b)),
@@ -163,7 +167,7 @@ mod tests {
     fn test() {
         use TokenType::*;
         let input = b"
-            fn foo(bar, baz) {
+            fn foo(bar: int, baz: str) {
                 println(\"hello, world\");
             }
         ";
@@ -173,10 +177,14 @@ mod tests {
             tok(Ident, "foo", 2, 16),
             tok(Lparen, "(", 2, 19),
             tok(Ident, "bar", 2, 20),
-            tok(Comma, ",", 2, 23),
-            tok(Ident, "baz", 2, 25),
-            tok(Rparen, ")", 2, 28),
-            tok(Lbrace, "{", 2, 30),
+            tok(Colon, ":", 2, 23),
+            tok(Ident, "int", 2, 25),
+            tok(Comma, ",", 2, 28),
+            tok(Ident, "baz", 2, 30),
+            tok(Colon, ":", 2, 33),
+            tok(Ident, "str", 2, 35),
+            tok(Rparen, ")", 2, 38),
+            tok(Lbrace, "{", 2, 40),
             tok(Ident, "println", 3, 17),
             tok(Lparen, "(", 3, 24),
             tok(Str, "hello, world", 3, 25),

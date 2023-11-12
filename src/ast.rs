@@ -21,16 +21,11 @@ pub enum Expr {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub enum Type {
-    Str,
-}
-
-#[derive(Debug, PartialEq, Eq)]
 pub struct Param {
     pub line: usize,
     pub col: usize,
     pub name: String,
-    pub typ: Type,
+    pub typ: String,
 }
 
 #[derive(Debug, PartialEq, Eq)]

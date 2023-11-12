@@ -9,6 +9,7 @@ pub enum TokenType {
     Comma,
     Str,
     Ident,
+    Colon,
 }
 
 #[derive(Debug, PartialEq, Eq)]
