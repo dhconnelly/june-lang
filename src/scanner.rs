@@ -1,28 +1,22 @@
-use std::error;
-use std::fmt;
 use std::io::BufRead;
 use std::iter::Iterator;
+use std::result;
+use thiserror::Error;
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Token;
 
-#[derive(Debug)]
-pub struct Error;
+#[derive(Error, Debug)]
+pub enum Error {}
 
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "scanner error")
-    }
-}
-
-impl error::Error for Error {}
+pub type Result<T> = result::Result<T, Error>;
 
 pub struct Scanner<R: BufRead> {
     _r: R,
 }
 
 impl<R: BufRead> Iterator for Scanner<R> {
-    type Item = Result<Token, Error>;
+    type Item = Result<Token>;
 
     fn next(&mut self) -> Option<Self::Item> {
         None
@@ -37,7 +31,7 @@ pub fn scan<R: BufRead>(r: R) -> Scanner<R> {
 mod tests {
     use super::*;
 
-    fn scan_all(b: &[u8]) -> Result<Vec<Token>, Error> {
+    fn scan_all(b: &[u8]) -> Result<Vec<Token>> {
         let scanner = scan(b);
         scanner.collect()
     }
