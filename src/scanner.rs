@@ -1,29 +1,9 @@
+use crate::token::*;
 use std::io;
 use std::iter;
 use std::result;
 use std::string;
 use thiserror::Error;
-
-#[derive(Debug, PartialEq, Eq)]
-pub enum TokenType {
-    Fn,
-    Lparen,
-    Rparen,
-    Lbrace,
-    Rbrace,
-    Semi,
-    Comma,
-    Str,
-    Ident,
-}
-
-#[derive(Debug, PartialEq, Eq)]
-pub struct Token {
-    typ: TokenType,
-    text: String,
-    line: usize,
-    col: usize,
-}
 
 #[derive(Error, Debug)]
 pub enum Error {
