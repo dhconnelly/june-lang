@@ -87,7 +87,7 @@ impl<R: io::BufRead> Scanner<R> {
         }
     }
 
-    fn eat_while(&mut self, f: impl Fn(u8) -> bool) -> Result<String> {
+    fn advance_while(&mut self, f: impl Fn(u8) -> bool) -> Result<String> {
         let mut buf = Vec::new();
         while f(self.peek().ok_or(Error::UnexpectedEOF)??) {
             buf.push(self.advance().unwrap());
@@ -104,14 +104,14 @@ impl<R: io::BufRead> Scanner<R> {
     fn str(&mut self) -> Result<Token> {
         let (line, col) = (self.line, self.col);
         self.eat(b'"', TokenType::Str)?;
-        let text = self.eat_while(|b| b != b'"')?;
+        let text = self.advance_while(|b| b != b'"')?;
         self.eat(b'"', TokenType::Str)?;
         Ok(Token { typ: TokenType::Str, text, line, col })
     }
 
     fn keyword_or_ident(&mut self) -> Result<Token> {
         let (line, col) = (self.line, self.col);
-        let text = self.eat_while(|b| !is_delim(b))?;
+        let text = self.advance_while(|b| !is_delim(b))?;
         Ok(Token { typ: ident_type(&text), text, line, col })
     }
 
