@@ -12,7 +12,7 @@ pub enum Error {
     IOError(#[from] io::Error),
 
     #[error("scanner: {0}")]
-    ScannerError(#[from] scanner::Error),
+    ScannerError(#[from] scanner::ScannerError),
 }
 
 type Result<T> = result::Result<T, Error>;
@@ -22,7 +22,8 @@ pub struct Compiler;
 pub fn compile(p: impl AsRef<Path>) -> Result<()> {
     let f = File::open(p)?;
     let scan = scanner::scan(BufReader::new(f));
-    let toks = scan.collect::<result::Result<Vec<_>, scanner::Error>>()?;
+    let toks =
+        scan.collect::<result::Result<Vec<_>, scanner::ScannerError>>()?;
     for tok in toks {
         println!("{:?}", tok);
     }

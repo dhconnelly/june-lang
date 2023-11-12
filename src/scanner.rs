@@ -1,9 +1,6 @@
-use std::error;
-use std::fmt;
 use std::io;
-use std::io::BufRead;
 use std::iter;
-use std::iter::Iterator;
+use std::result;
 use std::string;
 use thiserror::Error;
 
@@ -24,10 +21,12 @@ pub enum TokenType {
 pub struct Token {
     typ: TokenType,
     text: String,
+    line: usize,
+    col: usize,
 }
 
 #[derive(Error, Debug)]
-pub enum ErrorType {
+pub enum Error {
     #[error("io: {0}")]
     IOError(#[from] io::Error),
     #[error("invalid identifier: {0}")]
@@ -40,24 +39,10 @@ pub enum ErrorType {
     UnknownToken(u8),
 }
 
-#[derive(Debug)]
-pub struct Error {
-    line: usize,
-    col: usize,
-    err: ErrorType,
-}
+type Result<T> = result::Result<T, Error>;
 
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}:{}: {}", self.line, self.col, self.err)
-    }
-}
-
-impl error::Error for Error {}
-
-pub struct Scanner<R: BufRead> {
+pub struct Scanner<R: io::BufRead> {
     bytes: iter::Peekable<io::Bytes<R>>,
-    buf: Vec<u8>,
     line: usize,
     col: usize,
 }
@@ -74,25 +59,9 @@ fn ident_type(s: &str) -> TokenType {
     }
 }
 
-impl<R: BufRead> Scanner<R> {
-    fn advance(&mut self) -> Option<Result<u8, ErrorType>> {
-        let b = self.bytes.next()?.map_err(|err| err.into());
-        if let Ok(b) = b {
-            if b == b'\n' {
-                self.line += 1;
-                self.col = 1;
-            } else {
-                self.col += 1;
-            }
-        }
-        Some(b)
-    }
-
-    fn must_advance(&mut self) -> Result<u8, ErrorType> {
-        self.advance().ok_or(ErrorType::UnexpectedEOF)?
-    }
-
-    fn peek(&mut self) -> Option<Result<u8, ErrorType>> {
+impl<R: io::BufRead> Scanner<R> {
+    fn peek(&mut self) -> Option<Result<u8>> {
+        // if peek has an error, go ahead and get the owned result via advance
         match self.bytes.peek() {
             None => None,
             Some(Err(_)) => Some(self.bytes.next()?.map_err(|e| e.into())),
@@ -100,111 +69,111 @@ impl<R: BufRead> Scanner<R> {
         }
     }
 
-    fn must_peek(&mut self) -> Result<u8, ErrorType> {
-        self.peek().ok_or(ErrorType::UnexpectedEOF)?
-    }
-
-    fn str(&mut self) -> Result<Token, ErrorType> {
-        self.buf.clear();
-        loop {
-            let b = self.must_advance()?;
-            if b == b'"' {
-                break;
-            } else {
-                self.buf.push(b);
-            }
+    fn advance(&mut self) -> Result<u8> {
+        let b = self.bytes.next().ok_or(Error::UnexpectedEOF)??;
+        if b == b'\n' {
+            self.line += 1;
+            self.col = 1;
+        } else {
+            self.col += 1;
         }
-        self.emit(TokenType::Str)
+        Ok(b)
     }
 
-    fn keyword_or_ident(&mut self) -> Result<Token, ErrorType> {
-        loop {
-            let r = self.must_peek()?;
-            if is_delim(r) {
-                break;
-            } else {
-                let r = self.must_advance().unwrap();
-                self.buf.push(r);
-            }
-        }
-        let text = String::from_utf8(self.buf.split_off(0))?;
-        self.emit_text(ident_type(&text), text)
-    }
-
-    fn eat(&mut self, want: u8, typ: TokenType) -> Result<u8, ErrorType> {
-        self.eat_if(|b| b == want, typ)
-    }
-
-    fn eat_if(
-        &mut self,
-        f: impl Fn(u8) -> bool,
-        typ: TokenType,
-    ) -> Result<u8, ErrorType> {
-        match self.must_advance()? {
-            got if f(got) => Ok(got),
-            _ => Err(ErrorType::InvalidToken(typ)),
+    fn eat(&mut self, want: u8, typ: TokenType) -> Result<u8> {
+        match self.advance()? {
+            got if got == want => Ok(got),
+            _ => Err(Error::InvalidToken(typ)),
         }
     }
 
-    fn emit_text(
-        &mut self,
-        typ: TokenType,
-        text: String,
-    ) -> Result<Token, ErrorType> {
-        Ok(Token { typ, text })
+    fn eat_while(&mut self, f: impl Fn(u8) -> bool) -> Result<String> {
+        let mut buf = Vec::new();
+        while f(self.peek().ok_or(Error::UnexpectedEOF)??) {
+            let b = self.advance().unwrap();
+            buf.push(b);
+        }
+        Ok(String::from_utf8(buf)?)
     }
 
-    fn emit(&mut self, typ: TokenType) -> Result<Token, ErrorType> {
-        let text = String::from_utf8(self.buf.split_off(0))?;
-        self.emit_text(typ, text)
+    fn symbol(&mut self, typ: TokenType) -> Result<Token> {
+        let (line, col) = (self.line, self.col);
+        let text = (self.advance()? as char).to_string();
+        Ok(Token { typ, text, line, col })
+    }
+
+    fn str(&mut self) -> Result<Token> {
+        let (line, col) = (self.line, self.col);
+        self.eat(b'"', TokenType::Str)?;
+        let text = self.eat_while(|b| b != b'"')?;
+        self.eat(b'"', TokenType::Str)?;
+        Ok(Token { typ: TokenType::Str, text, line, col })
+    }
+
+    fn keyword_or_ident(&mut self) -> Result<Token> {
+        let (line, col) = (self.line, self.col);
+        let text = self.eat_while(|b| !is_delim(b))?;
+        Ok(Token { typ: ident_type(&text), text, line, col })
     }
 }
 
-impl<R: BufRead> Iterator for Scanner<R> {
-    type Item = Result<Token, Error>;
+#[derive(Debug, Error)]
+#[error("{line}:{col}: {err:?}")]
+pub struct ScannerError {
+    line: usize,
+    col: usize,
+    err: Error,
+}
+
+impl<R: io::BufRead> iter::Iterator for Scanner<R> {
+    type Item = result::Result<Token, ScannerError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        use TokenType::*;
-        loop {
-            let line = self.line;
-            let col = self.col;
-            self.buf.clear();
-            let b = match self.advance()? {
+        let result = loop {
+            let (line, col) = (self.line, self.col);
+            let b = match self.peek()? {
                 Ok(b) => b,
-                Err(err) => return Some(Err(Error { err, line, col })),
+                Err(err) => break Err(ScannerError { line, col, err }),
             };
-            self.buf.push(b);
             let result = match b {
-                b if b.is_ascii_whitespace() => continue,
-                b'(' => self.emit(Lparen),
-                b')' => self.emit(Rparen),
-                b'{' => self.emit(Lbrace),
-                b'}' => self.emit(Rbrace),
-                b',' => self.emit(Comma),
-                b';' => self.emit(Semi),
+                b if b.is_ascii_whitespace() => {
+                    self.advance().unwrap();
+                    continue;
+                }
+                b'(' => self.symbol(TokenType::Lparen),
+                b')' => self.symbol(TokenType::Rparen),
+                b'{' => self.symbol(TokenType::Lbrace),
+                b'}' => self.symbol(TokenType::Rbrace),
+                b',' => self.symbol(TokenType::Comma),
+                b';' => self.symbol(TokenType::Semi),
                 b'"' => self.str(),
                 b if b.is_ascii_alphabetic() => self.keyword_or_ident(),
-                b => Err(ErrorType::UnknownToken(b)),
+                b => Err(Error::UnknownToken(b)),
             };
-            return Some(match result {
-                Err(err) => Err(Error { line, col, err }),
+            break match result {
+                Err(err) => Err(ScannerError { line, col, err }),
                 Ok(tok) => Ok(tok),
-            });
-        }
+            };
+        };
+        Some(result)
     }
 }
 
-pub fn scan<R: BufRead>(r: R) -> Scanner<R> {
-    Scanner { bytes: r.bytes().peekable(), buf: Vec::new(), line: 1, col: 1 }
+pub fn scan<R: io::BufRead>(r: R) -> Scanner<R> {
+    Scanner { bytes: r.bytes().peekable(), line: 1, col: 1 }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn scan_all(b: &[u8]) -> Result<Vec<Token>, Error> {
+    fn scan_all(b: &[u8]) -> result::Result<Vec<Token>, ScannerError> {
         let scanner = scan(b);
         scanner.collect()
+    }
+
+    fn tok(typ: TokenType, text: &str, line: usize, col: usize) -> Token {
+        Token { typ, text: text.to_owned(), line, col }
     }
 
     #[test]
@@ -226,20 +195,20 @@ mod tests {
         ";
         let toks = scan_all(input).unwrap();
         let expected = vec![
-            Token { typ: Fn, text: String::from("fn") },
-            Token { typ: Ident, text: String::from("foo") },
-            Token { typ: Lparen, text: String::from("(") },
-            Token { typ: Ident, text: String::from("bar") },
-            Token { typ: Comma, text: String::from(",") },
-            Token { typ: Ident, text: String::from("baz") },
-            Token { typ: Rparen, text: String::from(")") },
-            Token { typ: Lbrace, text: String::from("{") },
-            Token { typ: Ident, text: String::from("println") },
-            Token { typ: Lparen, text: String::from("(") },
-            Token { typ: Str, text: String::from("hello, world") },
-            Token { typ: Rparen, text: String::from(")") },
-            Token { typ: Semi, text: String::from(";") },
-            Token { typ: Rbrace, text: String::from("}") },
+            tok(Fn, "fn", 2, 13),
+            tok(Ident, "foo", 2, 16),
+            tok(Lparen, "(", 2, 19),
+            tok(Ident, "bar", 2, 20),
+            tok(Comma, ",", 2, 23),
+            tok(Ident, "baz", 2, 25),
+            tok(Rparen, ")", 2, 28),
+            tok(Lbrace, "{", 2, 30),
+            tok(Ident, "println", 3, 17),
+            tok(Lparen, "(", 3, 24),
+            tok(Str, "hello, world", 3, 25),
+            tok(Rparen, ")", 3, 39),
+            tok(Semi, ";", 3, 40),
+            tok(Rbrace, "}", 4, 13),
         ];
         assert_eq!(expected, toks);
     }
