@@ -16,7 +16,7 @@ pub enum Error {
     Invalid { want: String, got: Token },
 }
 
-type Result<T> = result::Result<T, Error>;
+pub type Result<T> = result::Result<T, Error>;
 
 pub struct Parser<R: io::BufRead> {
     scanner: iter::Peekable<scanner::Scanner<R>>,

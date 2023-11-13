@@ -1,10 +1,18 @@
-use crate::types::Type;
+use crate::types::{Type, Typed};
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Call<Assoc = ()> {
     pub target: Box<Expr<Assoc>>,
     pub args: Vec<Expr<Assoc>>,
     pub assoc: Assoc,
+}
+
+pub type TypedCall = Call<Type>;
+
+impl Typed for TypedCall {
+    fn typ(&self) -> &Type {
+        &self.assoc
+    }
 }
 
 impl Call<()> {
@@ -20,6 +28,12 @@ pub struct Primary<T, Assoc = ()> {
 }
 
 pub type TypedPrimary<T> = Primary<T, Type>;
+
+impl<T> Typed for TypedPrimary<T> {
+    fn typ(&self) -> &Type {
+        &self.assoc
+    }
+}
 
 impl<T> Primary<T, ()> {
     pub fn new<U: Into<T>>(cargo: U) -> Primary<T> {
@@ -37,33 +51,44 @@ pub enum Expr<Assoc = ()> {
 
 pub type TypedExpr = Expr<Type>;
 
-#[derive(Debug, PartialEq, Eq)]
+impl Typed for TypedExpr {
+    fn typ(&self) -> &Type {
+        match self {
+            Self::IdentExpr(expr) => expr.typ(),
+            Self::StrExpr(expr) => expr.typ(),
+            Self::IntExpr(expr) => expr.typ(),
+            Self::CallExpr(expr) => expr.typ(),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
 pub struct Param {
     pub name: String,
     pub typ: String,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq)]
 pub enum Stmt<Assoc = ()> {
     ExprStmt(Expr<Assoc>),
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq)]
 pub struct Block<Assoc = ()>(pub Vec<Stmt<Assoc>>);
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq)]
 pub struct FnExpr<Assoc = ()> {
     pub name: String,
     pub params: Vec<Param>,
     pub body: Block<Assoc>,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq)]
 pub enum Def<Assoc = ()> {
     FnDef(FnExpr<Assoc>),
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq)]
 pub struct Program<Assoc = ()> {
     pub defs: Vec<Def<Assoc>>,
 }

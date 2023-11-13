@@ -1,13 +1,17 @@
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct FnType {
-    params: Vec<Type>,
-    ret: Box<Type>,
+    pub params: Vec<Type>,
+    pub ret: Box<Type>,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Type {
-    VoidType,
-    IntType,
-    StrType,
-    FnType(FnType),
+    Void,
+    Int,
+    Str,
+    Fn(FnType),
+}
+
+pub trait Typed {
+    fn typ(&self) -> &Type;
 }
