@@ -1,6 +1,7 @@
 use crate::token::*;
 use std::io;
 use std::iter;
+use std::num;
 use std::result;
 use std::string;
 use thiserror::Error;
@@ -13,10 +14,12 @@ pub enum ErrorType {
     UTF8Error(#[from] string::FromUtf8Error),
     #[error("unexpected eof")]
     UnexpectedEOF,
-    #[error("invalid {0:?}")]
-    InvalidToken(TokenType),
+    #[error("invalid {0}")]
+    InvalidToken(String),
     #[error("unknown token: {0}")]
     UnknownToken(u8),
+    #[error("invalid int: {0}")]
+    IntError(#[from] num::ParseIntError),
 }
 
 type Result<T> = result::Result<T, ErrorType>;
@@ -31,19 +34,15 @@ fn is_delim(b: u8) -> bool {
     !b.is_ascii_alphanumeric()
 }
 
-fn ident_type(s: &str) -> TokenType {
-    use TokenType::*;
+fn ident_type(s: &str) -> TokenCargo {
+    use TokenCargo::*;
     match s {
         "fn" => Fn,
-        _ => Ident,
+        _ => Ident(s.to_owned()),
     }
 }
 
 impl<R: io::BufRead> Scanner<R> {
-    pub fn eof(&mut self) -> bool {
-        self.bytes.peek().is_none()
-    }
-
     fn peek(&mut self) -> Option<Result<u8>> {
         // not all errors can be copied (e.g. io::Error), so if peek has
         // an error, we go ahead and get the owned error via advance().
@@ -64,11 +63,11 @@ impl<R: io::BufRead> Scanner<R> {
         Ok(b)
     }
 
-    fn eat(&mut self, want: u8, typ: TokenType) -> Result<u8> {
+    fn eat(&mut self, want: u8, typ: &str) -> Result<u8> {
         if self.advance()? == want {
             Ok(want)
         } else {
-            Err(ErrorType::InvalidToken(typ))
+            Err(ErrorType::InvalidToken(typ.to_owned()))
         }
     }
 
@@ -80,32 +79,33 @@ impl<R: io::BufRead> Scanner<R> {
         Ok(String::from_utf8(buf)?)
     }
 
-    fn symbol(&mut self, typ: TokenType) -> Result<Token> {
+    fn advance_emit(&mut self, size: usize, typ: TokenCargo) -> Result<Token> {
         let (line, col) = (self.line, self.col);
-        let text = (self.advance()? as char).to_string();
-        Ok(Token { typ, text, line, col })
+        for _ in 0..size {
+            self.advance()?;
+        }
+        Ok(Token { typ, line, col })
     }
 
     fn str(&mut self) -> Result<Token> {
         let (line, col) = (self.line, self.col);
-        self.eat(b'"', TokenType::Str)?;
+        self.eat(b'"', "str")?;
         let text = self.advance_while(|b| b != b'"')?;
-        self.eat(b'"', TokenType::Str)?;
-        Ok(Token { typ: TokenType::Str, text, line, col })
+        self.eat(b'"', "str")?;
+        Ok(Token { typ: TokenCargo::Str(text), line, col })
     }
 
     fn int(&mut self) -> Result<Token> {
         let (line, col) = (self.line, self.col);
         let text = self.advance_while(|b| !is_delim(b))?;
-        text.parse::<i64>()
-            .map_err(|_| ErrorType::InvalidToken(TokenType::Int))?;
-        Ok(Token { typ: TokenType::Int, text, line, col })
+        let int = text.parse::<i64>()?;
+        Ok(Token { typ: TokenCargo::Int(int), line, col })
     }
 
     fn keyword_or_ident(&mut self) -> Result<Token> {
         let (line, col) = (self.line, self.col);
         let text = self.advance_while(|b| !is_delim(b))?;
-        Ok(Token { typ: ident_type(&text), text, line, col })
+        Ok(Token { typ: ident_type(&text), line, col })
     }
 
     fn skip_whitespace(&mut self) {
@@ -132,13 +132,13 @@ impl<R: io::BufRead> iter::Iterator for Scanner<R> {
         let result = self
             .peek()?
             .and_then(|b| match b {
-                b'(' => self.symbol(TokenType::Lparen),
-                b')' => self.symbol(TokenType::Rparen),
-                b'{' => self.symbol(TokenType::Lbrace),
-                b'}' => self.symbol(TokenType::Rbrace),
-                b',' => self.symbol(TokenType::Comma),
-                b';' => self.symbol(TokenType::Semi),
-                b':' => self.symbol(TokenType::Colon),
+                b'(' => self.advance_emit(1, TokenCargo::Lparen),
+                b')' => self.advance_emit(1, TokenCargo::Rparen),
+                b'{' => self.advance_emit(1, TokenCargo::Lbrace),
+                b'}' => self.advance_emit(1, TokenCargo::Rbrace),
+                b',' => self.advance_emit(1, TokenCargo::Comma),
+                b';' => self.advance_emit(1, TokenCargo::Semi),
+                b':' => self.advance_emit(1, TokenCargo::Colon),
                 b'"' => self.str(),
                 b if b.is_ascii_digit() => self.int(),
                 b if b.is_ascii_alphabetic() => self.keyword_or_ident(),
@@ -161,8 +161,8 @@ mod tests {
         scan(b).collect()
     }
 
-    fn tok(typ: TokenType, text: &str, line: usize, col: usize) -> Token {
-        Token { typ, text: text.to_owned(), line, col }
+    fn tok(typ: TokenCargo, line: usize, col: usize) -> Token {
+        Token { typ, line, col }
     }
 
     #[test]
@@ -176,7 +176,7 @@ mod tests {
 
     #[test]
     fn test() {
-        use TokenType::*;
+        use TokenCargo::*;
         let input = b"
             fn foo(bar: int, baz: str) {
                 println(\"hello, world\", 27);
@@ -184,26 +184,26 @@ mod tests {
         ";
         let toks = scan_all(input).unwrap();
         let expected = vec![
-            tok(Fn, "fn", 2, 13),
-            tok(Ident, "foo", 2, 16),
-            tok(Lparen, "(", 2, 19),
-            tok(Ident, "bar", 2, 20),
-            tok(Colon, ":", 2, 23),
-            tok(Ident, "int", 2, 25),
-            tok(Comma, ",", 2, 28),
-            tok(Ident, "baz", 2, 30),
-            tok(Colon, ":", 2, 33),
-            tok(Ident, "str", 2, 35),
-            tok(Rparen, ")", 2, 38),
-            tok(Lbrace, "{", 2, 40),
-            tok(Ident, "println", 3, 17),
-            tok(Lparen, "(", 3, 24),
-            tok(Str, "hello, world", 3, 25),
-            tok(Comma, ",", 3, 39),
-            tok(Int, "27", 3, 41),
-            tok(Rparen, ")", 3, 43),
-            tok(Semi, ";", 3, 44),
-            tok(Rbrace, "}", 4, 13),
+            tok(Fn, 2, 13),
+            tok(Ident("foo".to_owned()), 2, 16),
+            tok(Lparen, 2, 19),
+            tok(Ident("bar".to_owned()), 2, 20),
+            tok(Colon, 2, 23),
+            tok(Ident("int".to_owned()), 2, 25),
+            tok(Comma, 2, 28),
+            tok(Ident("baz".to_owned()), 2, 30),
+            tok(Colon, 2, 33),
+            tok(Ident("str".to_owned()), 2, 35),
+            tok(Rparen, 2, 38),
+            tok(Lbrace, 2, 40),
+            tok(Ident("println".to_owned()), 3, 17),
+            tok(Lparen, 3, 24),
+            tok(Str("hello, world".to_owned()), 3, 25),
+            tok(Comma, 3, 39),
+            tok(Int(27), 3, 41),
+            tok(Rparen, 3, 43),
+            tok(Semi, 3, 44),
+            tok(Rbrace, 4, 13),
         ];
         assert_eq!(expected, toks);
     }

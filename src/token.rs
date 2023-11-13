@@ -1,5 +1,5 @@
 #[derive(Debug, PartialEq, Eq)]
-pub enum TokenType {
+pub enum TokenCargo {
     Fn,
     Lparen,
     Rparen,
@@ -7,16 +7,15 @@ pub enum TokenType {
     Rbrace,
     Semi,
     Comma,
-    Str,
-    Ident,
+    Str(String),
+    Ident(String),
     Colon,
-    Int,
+    Int(i64),
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Token {
-    pub typ: TokenType,
-    pub text: String,
+    pub typ: TokenCargo,
     pub line: usize,
     pub col: usize,
 }

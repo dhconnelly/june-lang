@@ -1,7 +1,8 @@
 use crate::ast::{Expr::*, *};
 use crate::scanner;
-use crate::token::{Token, TokenType::*};
+use crate::token::TokenCargo::*;
 use std::io;
+use std::iter;
 use std::result;
 use thiserror::Error;
 
@@ -18,31 +19,35 @@ pub enum ErrorType {
 type Result<T> = result::Result<T, ErrorType>;
 
 pub struct Parser<R: io::BufRead> {
-    scanner: scanner::Scanner<R>,
+    scanner: iter::Peekable<scanner::Scanner<R>>,
 }
 
 impl<R: io::BufRead> Parser<R> {
     fn eof(&mut self) -> bool {
-        self.scanner.eof()
+        self.scanner.peek().is_none()
     }
 
     pub fn primary(&mut self) -> Result<Expr> {
         let tok = self.scanner.next().ok_or(ErrorType::UnexpectedEOF)??;
-        let (line, col, cargo) = (tok.line, tok.col, tok.text);
+        let (line, col) = (tok.line, tok.col);
         match tok.typ {
-            Str => Ok(StrExpr(Primary { line, col, cargo })),
-            Ident => Ok(IdentExpr(Primary { line, col, cargo })),
-            Int => {
-                // ints are checked in the scanner
-                let cargo = cargo.parse::<i64>().unwrap();
-                Ok(IntExpr(Primary { line, col, cargo }))
-            }
-            _ => return Err(ErrorType::Invalid(String::from("primary"))),
+            Str(cargo) => Ok(StrExpr(Primary { line, col, cargo })),
+            Ident(cargo) => Ok(IdentExpr(Primary { line, col, cargo })),
+            Int(cargo) => Ok(IntExpr(Primary { line, col, cargo })),
+            _ => Err(ErrorType::Invalid(String::from("primary"))),
         }
     }
 
+    pub fn def(&mut self) -> Result<Def> {
+        todo!()
+    }
+
     pub fn program(&mut self) -> Result<Program> {
-        Ok(Program { defs: Vec::new() })
+        let mut defs = Vec::new();
+        while !self.eof() {
+            defs.push(self.def()?);
+        }
+        Ok(Program { defs })
     }
 }
 
@@ -55,7 +60,7 @@ pub struct ParserError {
 }
 
 pub fn parse<R: io::BufRead>(scanner: scanner::Scanner<R>) -> Parser<R> {
-    Parser { scanner }
+    Parser { scanner: scanner.peekable() }
 }
 
 #[cfg(test)]
