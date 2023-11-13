@@ -1,15 +1,11 @@
 #[derive(Debug, PartialEq, Eq)]
 pub struct Call {
-    pub line: usize,
-    pub col: usize,
     pub target: Box<Expr>,
     pub args: Vec<Expr>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Primary<T> {
-    pub line: usize,
-    pub col: usize,
     pub cargo: T,
 }
 
@@ -23,8 +19,6 @@ pub enum Expr {
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Param {
-    pub line: usize,
-    pub col: usize,
     pub name: String,
     pub typ: String,
 }
@@ -39,8 +33,6 @@ pub struct Block(pub Vec<Stmt>);
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct FnExpr {
-    pub line: usize,
-    pub col: usize,
     pub name: String,
     pub params: Vec<Param>,
     pub body: Block,

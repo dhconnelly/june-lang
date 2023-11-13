@@ -13,10 +13,10 @@ pub enum Error {
     IOError(#[from] io::Error),
 
     #[error("scanner: {0}")]
-    ScannerError(#[from] scanner::ScannerError),
+    ScannerError(#[from] scanner::Error),
 
     #[error("parser: {0}")]
-    ParserError(#[from] parser::ParserError),
+    ParserError(#[from] parser::Error),
 }
 
 type Result<T> = result::Result<T, Error>;

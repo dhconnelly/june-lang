@@ -1,5 +1,5 @@
-#[derive(Debug, PartialEq, Eq)]
-pub enum TokenCargo {
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum Token {
     Fn,
     Lparen,
     Rparen,
@@ -11,11 +11,4 @@ pub enum TokenCargo {
     Ident(String),
     Colon,
     Int(i64),
-}
-
-#[derive(Debug, PartialEq, Eq)]
-pub struct Token {
-    pub typ: TokenCargo,
-    pub line: usize,
-    pub col: usize,
 }
