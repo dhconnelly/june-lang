@@ -1,7 +1,8 @@
 use crate::types::{Type, Typed};
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Call<Assoc = ()> {
+    // TODO: Rc?
     pub target: Box<Expr<Assoc>>,
     pub args: Vec<Expr<Assoc>>,
     pub assoc: Assoc,
@@ -21,7 +22,7 @@ impl Call<()> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Primary<T, Assoc = ()> {
     pub cargo: T,
     pub assoc: Assoc,
@@ -41,12 +42,13 @@ impl<T> Primary<T, ()> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Expr<Assoc = ()> {
     IdentExpr(Primary<String, Assoc>),
     StrExpr(Primary<String, Assoc>),
     IntExpr(Primary<i64, Assoc>),
     CallExpr(Call<Assoc>),
+    FuncExpr(Func<Assoc>),
 }
 
 pub type TypedExpr = Expr<Type>;
@@ -58,37 +60,55 @@ impl Typed for TypedExpr {
             Self::StrExpr(expr) => expr.typ(),
             Self::IntExpr(expr) => expr.typ(),
             Self::CallExpr(expr) => expr.typ(),
+            Self::FuncExpr(expr) => expr.typ(),
         }
     }
 }
 
-#[derive(Debug, PartialEq)]
-pub struct Param {
-    pub name: String,
-    pub typ: String,
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum TypeSpec {
+    Void,
+    Simple(String),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct Param {
+    pub name: String,
+    pub typ: TypeSpec,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Stmt<Assoc = ()> {
     ExprStmt(Expr<Assoc>),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Block<Assoc = ()>(pub Vec<Stmt<Assoc>>);
 
-#[derive(Debug, PartialEq)]
-pub struct FnExpr<Assoc = ()> {
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct Func<Assoc = ()> {
     pub name: String,
     pub params: Vec<Param>,
     pub body: Block<Assoc>,
+    pub ret: TypeSpec,
+    // TODO: figure out how to make this statically FnType
+    pub assoc: Assoc,
 }
 
-#[derive(Debug, PartialEq)]
+pub type TypedFunc = Func<Type>;
+
+impl Typed for TypedFunc {
+    fn typ(&self) -> &Type {
+        &self.assoc
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
 pub enum Def<Assoc = ()> {
-    FnDef(FnExpr<Assoc>),
+    FnDef(Func<Assoc>),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Program<Assoc = ()> {
     pub defs: Vec<Def<Assoc>>,
 }

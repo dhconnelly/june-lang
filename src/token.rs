@@ -1,6 +1,6 @@
 #[derive(Debug, PartialEq, Clone)]
 pub enum Token {
-    Fn,
+    FnTok,
     Lparen,
     Rparen,
     Lbrace,

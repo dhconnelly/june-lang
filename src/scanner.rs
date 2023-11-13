@@ -48,7 +48,7 @@ fn is_delim(b: u8) -> bool {
 fn ident_type(s: &str) -> Token {
     use Token::*;
     match s {
-        "fn" => Fn,
+        "fn" => FnTok,
         _ => Ident(String::from(s)),
     }
 }
@@ -165,7 +165,7 @@ mod tests {
         ";
         let toks = scan_all(input).unwrap();
         let expected = vec![
-            Fn,
+            FnTok,
             Ident(String::from("foo")),
             Lparen,
             Ident(String::from("bar")),

@@ -1,4 +1,5 @@
 use crate::ast::{Expr::*, *};
+use crate::types;
 use crate::types::*;
 use std::collections::HashMap;
 use std::result;
@@ -8,14 +9,37 @@ use thiserror::Error;
 pub enum Error {
     #[error("undefined: {0}")]
     Undefined(String),
+    #[error("wrong number of arguments: want {want}, got {got}")]
+    Arity { want: usize, got: usize },
+    #[error("{0}")]
+    Type(#[from] types::Error),
+    #[error("not callable: {0:?}")]
+    InvalidCallable(Type),
 }
 
 type Result<T> = result::Result<T, Error>;
 
-pub fn analyze_expr(
-    expr: Expr,
-    ctx: &HashMap<String, Type>,
-) -> Result<TypedExpr> {
+// TODO: avoid copying the expression
+type SymbolTable = HashMap<String, TypedExpr>;
+
+fn analyze_all(exprs: Vec<Expr>, ctx: &SymbolTable) -> Result<Vec<TypedExpr>> {
+    let mut texprs = Vec::new();
+    for expr in exprs {
+        texprs.push(analyze_expr(expr, ctx)?);
+    }
+    Ok(texprs)
+}
+
+fn check_all(want: &[Type], got: &[TypedExpr]) -> Result<()> {
+    if want.len() != got.len() {
+        Err(Error::Arity { want: want.len(), got: got.len() })
+    } else {
+        let mut pairs = want.iter().zip(got.iter());
+        Ok(pairs.try_for_each(|(want, got)| want.check(got.typ()))?)
+    }
+}
+
+pub fn analyze_expr(expr: Expr, ctx: &SymbolTable) -> Result<TypedExpr> {
     match expr {
         IntExpr(prim) => Ok(IntExpr(TypedPrimary {
             cargo: prim.cargo,
@@ -27,14 +51,27 @@ pub fn analyze_expr(
         })),
         IdentExpr(prim) => {
             let name = prim.cargo;
-            let typ = ctx.get(&name).ok_or(Error::Undefined(name.clone()))?;
-            Ok(IdentExpr(TypedPrimary { cargo: name, assoc: typ.clone() }))
+            let expr = ctx.get(&name).ok_or(Error::Undefined(name.clone()))?;
+            Ok(expr.clone())
         }
+        CallExpr(call) => match analyze_expr(*call.target, ctx)? {
+            FuncExpr(f) => {
+                let fn_typ = f.typ().as_fn().unwrap();
+                let args = analyze_all(call.args, ctx)?;
+                check_all(&fn_typ.params, &args)?;
+                Ok(CallExpr(TypedCall {
+                    target: Box::new(FuncExpr(f)),
+                    args,
+                    assoc: *fn_typ.ret,
+                }))
+            }
+            typ => Err(Error::InvalidCallable(typ.typ().clone())),
+        },
         _ => todo!(),
     }
 }
 
-pub fn analyze_program(prog: Program) -> Result<TypedProgram> {
+pub fn analyze_program(_prog: Program) -> Result<TypedProgram> {
     todo!()
 }
 
@@ -74,18 +111,68 @@ mod test {
         let mut ctx = HashMap::new();
         ctx.insert(
             String::from("println"),
-            Type::Fn(FnType {
-                params: vec![Type::Int, Type::Str],
-                ret: Box::new(Type::Int),
+            TypedExpr::FuncExpr(TypedFunc {
+                name: String::from("println"),
+                params: vec![
+                    Param {
+                        name: String::from("left"),
+                        typ: TypeSpec::Simple(String::from("int")),
+                    },
+                    Param {
+                        name: String::from("right"),
+                        typ: TypeSpec::Simple(String::from("str")),
+                    },
+                ],
+                body: Block(vec![]),
+                ret: TypeSpec::Void,
+                assoc: Type::Fn(FnType {
+                    params: vec![Type::Int, Type::Str],
+                    ret: Box::new(Type::Void),
+                }),
             }),
         );
+        let inputs: &[&[u8]] = &[
+            b"println(\"foo\")",
+            b"println(27, 34)",
+            b"println(27, \"foo\")",
+        ];
+        let expected = vec![
+            Err(Error::Arity { want: 2, got: 1 }),
+            Err(Error::Type(types::Error {
+                want: String::from("Str"),
+                got: Type::Int,
+            })),
+            Ok(Type::Void),
+        ];
+        let actual =
+            analyze_all(inputs, |p| p.expr(), |e| analyze_expr(e, &ctx));
+        assert_eq!(expected, actual);
     }
 
     #[test]
     fn test_idents() {
         let mut ctx = HashMap::new();
-        ctx.insert(String::from("foo"), Type::Int);
-        ctx.insert(String::from("bar"), Type::Str);
+        ctx.insert(
+            String::from("foo"),
+            TypedExpr::IntExpr(TypedPrimary { cargo: 27, assoc: Type::Int }),
+        );
+        ctx.insert(
+            String::from("bar"),
+            TypedExpr::CallExpr(TypedCall {
+                target: Box::new(TypedExpr::FuncExpr(TypedFunc {
+                    name: String::from("test"),
+                    params: vec![],
+                    body: Block(vec![]),
+                    ret: TypeSpec::Simple(String::from("str")),
+                    assoc: Type::Fn(FnType {
+                        params: vec![],
+                        ret: Box::new(Type::Void),
+                    }),
+                })),
+                args: vec![],
+                assoc: Type::Str,
+            }),
+        );
         let inputs: &[&[u8]] = &[b"foo", b"bar", b"baz"];
         let expected = vec![
             Ok(Type::Int),

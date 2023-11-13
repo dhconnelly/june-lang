@@ -117,7 +117,7 @@ impl<R: io::BufRead> Parser<R> {
     pub fn param(&mut self) -> Result<Param> {
         let name = self.eat_ident()?;
         self.eat_tok(Colon)?;
-        let typ = self.eat_ident()?;
+        let typ = TypeSpec::Simple(self.eat_ident()?);
         Ok(Param { name, typ })
     }
 
@@ -125,14 +125,14 @@ impl<R: io::BufRead> Parser<R> {
         self.primary()
     }
 
-    pub fn fn_expr(&mut self) -> Result<FnExpr> {
-        self.eat_tok(Fn)?;
+    pub fn fn_expr(&mut self) -> Result<Func> {
+        self.eat_tok(FnTok)?;
         let name = self.eat_ident()?;
         self.eat_tok(Lparen)?;
         let params = self.list(|p| p.param())?;
         self.eat_tok(Rparen)?;
         let body = self.block()?;
-        Ok(FnExpr { name, params, body })
+        Ok(Func { name, params, body, ret: TypeSpec::Void, assoc: () })
     }
 
     pub fn def(&mut self) -> Result<Def> {
@@ -240,8 +240,10 @@ mod test {
     #[test]
     fn test_param() {
         let input = b" foo : bar ";
-        let expected =
-            Param { name: String::from("foo"), typ: String::from("bar") };
+        let expected = Param {
+            name: String::from("foo"),
+            typ: TypeSpec::Simple(String::from("bar")),
+        };
         let actual = parse(input).param().unwrap();
         assert_eq!(expected, actual);
     }
@@ -249,16 +251,24 @@ mod test {
     #[test]
     fn test_fn() {
         let input = b" fn hello ( world: int, all: str ) { foo(27); } ";
-        let expected = FnExpr {
+        let expected = Func {
             name: "hello".to_string(),
             params: vec![
-                Param { name: String::from("world"), typ: String::from("int") },
-                Param { name: String::from("all"), typ: String::from("str") },
+                Param {
+                    name: String::from("world"),
+                    typ: TypeSpec::Simple(String::from("int")),
+                },
+                Param {
+                    name: String::from("all"),
+                    typ: TypeSpec::Simple(String::from("str")),
+                },
             ],
             body: Block(vec![ExprStmt(CallExpr(Call::new(
                 IdentExpr(Primary::new("foo")),
                 vec![IntExpr(Primary::new(27))],
             )))]),
+            ret: TypeSpec::Void,
+            assoc: (),
         };
         let actual = parse(input).fn_expr().unwrap();
         assert_eq!(expected, actual);
@@ -279,16 +289,16 @@ mod test {
         let ast = parse(input).program().unwrap();
         let expected = Program {
             defs: vec![
-                Def::FnDef(FnExpr {
+                Def::FnDef(Func {
                     name: String::from("foo"),
                     params: vec![
                         Param {
                             name: String::from("s"),
-                            typ: String::from("str"),
+                            typ: TypeSpec::Simple(String::from("str")),
                         },
                         Param {
                             name: String::from("t"),
-                            typ: String::from("int"),
+                            typ: TypeSpec::Simple(String::from("int")),
                         },
                     ],
                     body: Block(vec![Stmt::ExprStmt(Expr::CallExpr(
@@ -300,8 +310,10 @@ mod test {
                             ],
                         ),
                     ))]),
+                    ret: TypeSpec::Void,
+                    assoc: (),
                 }),
-                Def::FnDef(FnExpr {
+                Def::FnDef(Func {
                     name: String::from("main"),
                     params: vec![],
                     body: Block(vec![Stmt::ExprStmt(Expr::CallExpr(
@@ -310,6 +322,8 @@ mod test {
                             vec![Expr::StrExpr(Primary::new("hello, world"))],
                         ),
                     ))]),
+                    ret: TypeSpec::Void,
+                    assoc: (),
                 }),
             ],
         };
