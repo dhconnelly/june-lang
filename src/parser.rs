@@ -16,12 +16,6 @@ pub enum Error {
     Invalid { want: String, got: Token },
 }
 
-impl Error {
-    fn invalid(want: &str, got: Token) -> Error {
-        Error::Invalid { want: want.to_owned(), got }
-    }
-}
-
 type Result<T> = result::Result<T, Error>;
 
 pub struct Parser<R: io::BufRead> {
@@ -44,26 +38,26 @@ impl<R: io::BufRead> Parser<R> {
     fn eat<T>(
         &mut self,
         mut f: impl FnMut(&Token) -> Option<T>,
-        want: &str,
+        want: String,
     ) -> Result<T> {
         let got = self.advance()?;
         match f(&got) {
             Some(t) => Ok(t),
-            None => Err(Error::invalid(want, got)),
+            None => Err(Error::Invalid { want, got }),
         }
     }
 
     fn eat_tok(&mut self, want: Token) -> Result<()> {
         self.eat(
             |tok| if tok == &want { Some(()) } else { None },
-            &format!("{:?}", want),
+            format!("{:?}", want),
         )
     }
 
     fn eat_ident(&mut self) -> Result<String> {
         self.eat(
             |tok| if let Ident(s) = tok { Some(s.clone()) } else { None },
-            "ident",
+            String::from("ident"),
         )
     }
 
@@ -92,7 +86,7 @@ impl<R: io::BufRead> Parser<R> {
                 self.eat_tok(Rparen)?;
                 Ok(expr)
             }
-            tok => Err(Error::invalid("prim", tok)),
+            got => Err(Error::Invalid { want: String::from("prim"), got }),
         }?;
         if let Some(Ok(Lparen)) = self.scanner.peek() {
             self.eat_tok(Lparen)?;
@@ -211,22 +205,22 @@ mod test {
         let expected = vec![
             CallExpr(Call {
                 target: Box::new(IdentExpr(Primary {
-                    cargo: "foo".to_owned(),
+                    cargo: String::from("foo"),
                 })),
                 args: Vec::new(),
             }),
             CallExpr(Call {
                 target: Box::new(IdentExpr(Primary {
-                    cargo: "bar".to_owned(),
+                    cargo: String::from("bar"),
                 })),
-                args: vec![IdentExpr(Primary { cargo: "arg".to_owned() })],
+                args: vec![IdentExpr(Primary { cargo: String::from("arg") })],
             }),
             CallExpr(Call {
                 target: Box::new(IdentExpr(Primary {
-                    cargo: "println".to_owned(),
+                    cargo: String::from("println"),
                 })),
                 args: vec![
-                    StrExpr(Primary { cargo: "foo".to_owned() }),
+                    StrExpr(Primary { cargo: String::from("foo") }),
                     IntExpr(Primary { cargo: 27 }),
                 ],
             }),
@@ -248,9 +242,9 @@ mod test {
             ExprStmt(IntExpr(Primary { cargo: 27 })),
             ExprStmt(CallExpr(Call {
                 target: Box::new(IdentExpr(Primary {
-                    cargo: "foo".to_owned(),
+                    cargo: String::from("foo"),
                 })),
-                args: vec![IdentExpr(Primary { cargo: "bar".to_owned() })],
+                args: vec![IdentExpr(Primary { cargo: String::from("bar") })],
             })),
         ]);
         let actual = parse(input).block().unwrap();
@@ -260,7 +254,8 @@ mod test {
     #[test]
     fn test_param() {
         let input = b" foo : bar ";
-        let expected = Param { name: "foo".to_owned(), typ: "bar".to_owned() };
+        let expected =
+            Param { name: String::from("foo"), typ: String::from("bar") };
         let actual = parse(input).param().unwrap();
         assert_eq!(expected, actual);
     }
@@ -271,12 +266,12 @@ mod test {
         let expected = FnExpr {
             name: "hello".to_string(),
             params: vec![
-                Param { name: "world".to_owned(), typ: "int".to_owned() },
-                Param { name: "all".to_owned(), typ: "str".to_owned() },
+                Param { name: String::from("world"), typ: String::from("int") },
+                Param { name: String::from("all"), typ: String::from("str") },
             ],
             body: Block(vec![ExprStmt(CallExpr(Call {
                 target: Box::new(IdentExpr(Primary {
-                    cargo: "foo".to_owned(),
+                    cargo: String::from("foo"),
                 })),
                 args: vec![IntExpr(Primary { cargo: 27 })],
             }))]),

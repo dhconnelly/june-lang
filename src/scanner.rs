@@ -48,7 +48,7 @@ fn ident_type(s: &str) -> Token {
     use Token::*;
     match s {
         "fn" => Fn,
-        _ => Ident(s.to_owned()),
+        _ => Ident(String::from(s)),
     }
 }
 
@@ -65,7 +65,7 @@ impl<R: io::BufRead> Scanner<R> {
         if self.advance()? == want {
             Ok(want)
         } else {
-            Err(Error::InvalidToken(typ.to_owned()))
+            Err(Error::InvalidToken(String::from(typ)))
         }
     }
 
@@ -162,20 +162,20 @@ mod tests {
         let toks = scan_all(input).unwrap();
         let expected = vec![
             Fn,
-            Ident("foo".to_owned()),
+            Ident(String::from("foo")),
             Lparen,
-            Ident("bar".to_owned()),
+            Ident(String::from("bar")),
             Colon,
-            Ident("int".to_owned()),
+            Ident(String::from("int")),
             Comma,
-            Ident("baz".to_owned()),
+            Ident(String::from("baz")),
             Colon,
-            Ident("str".to_owned()),
+            Ident(String::from("str")),
             Rparen,
             Lbrace,
-            Ident("println".to_owned()),
+            Ident(String::from("println")),
             Lparen,
-            Str("hello, world".to_owned()),
+            Str(String::from("hello, world")),
             Comma,
             Int(27),
             Rparen,
