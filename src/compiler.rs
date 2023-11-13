@@ -1,3 +1,4 @@
+use crate::analyzer;
 use crate::parser;
 use crate::scanner;
 use std::fs::File;
@@ -27,7 +28,9 @@ pub fn compile(p: impl AsRef<Path>) -> Result<()> {
     let f = File::open(p)?;
     let s = scanner::scan(BufReader::new(f));
     let mut p = parser::parse(s);
-    let ast = p.program();
+    let ast = p.program()?;
     println!("{:#?}", ast);
+    let typed_ast = analyzer::analyze_program(&ast);
+    println!("{:#?}", typed_ast);
     Ok(())
 }
