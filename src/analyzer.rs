@@ -67,8 +67,19 @@ pub fn analyze_expr(expr: Expr, ctx: &SymbolTable) -> Result<TypedExpr> {
             }
             typ => Err(Error::InvalidCallable(typ.typ().clone())),
         },
-        _ => todo!(),
+        FuncExpr(_) => todo!(),
     }
+}
+
+pub fn analyze_stmt(stmt: Stmt, ctx: &SymbolTable) -> Result<()> {
+    match stmt {
+        Stmt::ExprStmt(expr) => analyze_expr(expr, ctx).map(|_| ()),
+    }
+}
+
+pub fn analyze_block(block: Block, ctx: &SymbolTable) -> Result<()> {
+    let Block(stmts) = block;
+    stmts.into_iter().try_for_each(|stmt| analyze_stmt(stmt, ctx))
 }
 
 pub fn analyze_program(_prog: Program) -> Result<TypedProgram> {
@@ -89,12 +100,12 @@ mod test {
     fn analyze_all<
         T,
         U: Typed,
-        F: Fn(T) -> Result<U>,
-        G: Fn(&mut parser::Parser<&[u8]>) -> parser::Result<T>,
+        F: Fn(&mut parser::Parser<&[u8]>) -> parser::Result<T>,
+        G: Fn(T) -> Result<U>,
     >(
         inputs: &[&[u8]],
-        parse: G,
-        analyze: F,
+        parse: F,
+        analyze: G,
     ) -> Vec<Result<Type>> {
         let mut v = Vec::new();
         for input in inputs {
