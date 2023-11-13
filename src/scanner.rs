@@ -72,7 +72,10 @@ impl<R: io::BufRead> Scanner<R> {
 
     fn advance_while<F: Fn(u8) -> bool>(&mut self, f: F) -> Result<String> {
         let mut buf = Vec::new();
-        while f(self.peek().ok_or(Error::UnexpectedEOF)??) {
+        while let Some(value) = self.peek() {
+            if !f(value?) {
+                break;
+            }
             buf.push(self.advance().unwrap());
         }
         Ok(String::from_utf8(buf)?)

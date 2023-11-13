@@ -78,9 +78,9 @@ impl<R: io::BufRead> Parser<R> {
 
     pub fn primary(&mut self) -> Result<Expr> {
         let prim = match self.scanner.next().ok_or(Error::UnexpectedEOF)?? {
-            Str(cargo) => Ok(StrExpr(Primary { cargo })),
-            Ident(cargo) => Ok(IdentExpr(Primary { cargo })),
-            Int(cargo) => Ok(IntExpr(Primary { cargo })),
+            Str(cargo) => Ok(StrExpr(Primary::new(cargo))),
+            Ident(cargo) => Ok(IdentExpr(Primary::new(cargo))),
+            Int(cargo) => Ok(IntExpr(Primary::new(cargo))),
             Lparen => {
                 let expr = self.expr()?;
                 self.eat_tok(Rparen)?;
@@ -92,7 +92,7 @@ impl<R: io::BufRead> Parser<R> {
             self.eat_tok(Lparen)?;
             let args = self.list(|p| p.expr())?;
             self.eat_tok(Rparen)?;
-            Ok(CallExpr(Call { target: Box::new(prim), args }))
+            Ok(CallExpr(Call::new(prim, args)))
         } else {
             Ok(prim)
         }
@@ -186,10 +186,10 @@ mod test {
     fn test_primary() {
         let input = b"foo bar 27 \"hello, world\"";
         let expected = vec![
-            Expr::IdentExpr(Primary { cargo: String::from("foo") }),
-            Expr::IdentExpr(Primary { cargo: String::from("bar") }),
-            Expr::IntExpr(Primary { cargo: 27 }),
-            Expr::StrExpr(Primary { cargo: String::from("hello, world") }),
+            Expr::IdentExpr(Primary::new("foo")),
+            Expr::IdentExpr(Primary::new("bar")),
+            Expr::IntExpr(Primary::new(27)),
+            Expr::StrExpr(Primary::new("hello, world")),
         ];
         let actual = parse_all(input, |p| p.primary());
         assert_eq!(expected, actual);
@@ -203,27 +203,15 @@ mod test {
             b" println ( \"foo\" , 27 ) ".as_slice(),
         ];
         let expected = vec![
-            CallExpr(Call {
-                target: Box::new(IdentExpr(Primary {
-                    cargo: String::from("foo"),
-                })),
-                args: Vec::new(),
-            }),
-            CallExpr(Call {
-                target: Box::new(IdentExpr(Primary {
-                    cargo: String::from("bar"),
-                })),
-                args: vec![IdentExpr(Primary { cargo: String::from("arg") })],
-            }),
-            CallExpr(Call {
-                target: Box::new(IdentExpr(Primary {
-                    cargo: String::from("println"),
-                })),
-                args: vec![
-                    StrExpr(Primary { cargo: String::from("foo") }),
-                    IntExpr(Primary { cargo: 27 }),
-                ],
-            }),
+            CallExpr(Call::new(IdentExpr(Primary::new("foo")), Vec::new())),
+            CallExpr(Call::new(
+                IdentExpr(Primary::new("bar")),
+                vec![IdentExpr(Primary::new("arg"))],
+            )),
+            CallExpr(Call::new(
+                IdentExpr(Primary::new("println")),
+                vec![StrExpr(Primary::new("foo")), IntExpr(Primary::new(27))],
+            )),
         ];
         let actual: Vec<Expr> = inputs
             .iter()
@@ -239,13 +227,11 @@ mod test {
             foo(bar);
         }";
         let expected = Block(vec![
-            ExprStmt(IntExpr(Primary { cargo: 27 })),
-            ExprStmt(CallExpr(Call {
-                target: Box::new(IdentExpr(Primary {
-                    cargo: String::from("foo"),
-                })),
-                args: vec![IdentExpr(Primary { cargo: String::from("bar") })],
-            })),
+            ExprStmt(IntExpr(Primary::new(27))),
+            ExprStmt(CallExpr(Call::new(
+                IdentExpr(Primary::new("foo")),
+                vec![IdentExpr(Primary::new("bar"))],
+            ))),
         ]);
         let actual = parse(input).block().unwrap();
         assert_eq!(expected, actual);
@@ -269,12 +255,10 @@ mod test {
                 Param { name: String::from("world"), typ: String::from("int") },
                 Param { name: String::from("all"), typ: String::from("str") },
             ],
-            body: Block(vec![ExprStmt(CallExpr(Call {
-                target: Box::new(IdentExpr(Primary {
-                    cargo: String::from("foo"),
-                })),
-                args: vec![IntExpr(Primary { cargo: 27 })],
-            }))]),
+            body: Block(vec![ExprStmt(CallExpr(Call::new(
+                IdentExpr(Primary::new("foo")),
+                vec![IntExpr(Primary::new(27))],
+            )))]),
         };
         let actual = parse(input).fn_expr().unwrap();
         assert_eq!(expected, actual);
@@ -307,31 +291,25 @@ mod test {
                             typ: String::from("int"),
                         },
                     ],
-                    body: Block(vec![Stmt::ExprStmt(Expr::CallExpr(Call {
-                        target: Box::new(Expr::IdentExpr(Primary {
-                            cargo: String::from("println"),
-                        })),
-                        args: vec![
-                            Expr::IdentExpr(Primary {
-                                cargo: String::from("s"),
-                            }),
-                            Expr::IdentExpr(Primary {
-                                cargo: String::from("t"),
-                            }),
-                        ],
-                    }))]),
+                    body: Block(vec![Stmt::ExprStmt(Expr::CallExpr(
+                        Call::new(
+                            Expr::IdentExpr(Primary::new("println")),
+                            vec![
+                                Expr::IdentExpr(Primary::new("s")),
+                                Expr::IdentExpr(Primary::new("t")),
+                            ],
+                        ),
+                    ))]),
                 }),
                 Def::FnDef(FnExpr {
                     name: String::from("main"),
                     params: vec![],
-                    body: Block(vec![Stmt::ExprStmt(Expr::CallExpr(Call {
-                        target: Box::new(Expr::IdentExpr(Primary {
-                            cargo: String::from("foo"),
-                        })),
-                        args: vec![Expr::StrExpr(Primary {
-                            cargo: String::from("hello, world"),
-                        })],
-                    }))]),
+                    body: Block(vec![Stmt::ExprStmt(Expr::CallExpr(
+                        Call::new(
+                            Expr::IdentExpr(Primary::new("foo")),
+                            vec![Expr::StrExpr(Primary::new("hello, world"))],
+                        ),
+                    ))]),
                 }),
             ],
         };
