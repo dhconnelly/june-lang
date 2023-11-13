@@ -1,4 +1,4 @@
-use crate::ast::{Expr::*, Stmt::*, *};
+use crate::ast::{Def::*, Expr::*, Stmt::*, *};
 use crate::scanner;
 use crate::token::{Token, Token::*};
 use std::io;
@@ -48,6 +48,16 @@ impl<R: io::BufRead> Parser<R> {
             Ok(result)
         } else {
             Err(Error::Invalid { want: typ.to_owned(), got: result })
+        }
+    }
+
+    fn ident(&mut self) -> Result<String> {
+        // TODO: unify this with eat()
+        let result = self.advance()?;
+        if let Ident(name) = result {
+            Ok(name)
+        } else {
+            Err(Error::Invalid { want: "ident".to_owned(), got: result })
         }
     }
 
@@ -109,22 +119,28 @@ impl<R: io::BufRead> Parser<R> {
     }
 
     pub fn param(&mut self) -> Result<Param> {
-        let name = self.advance()?;
+        let name = self.ident()?;
         self.eat(|tok| tok == &Colon, "param")?;
-        let typ = self.advance()?;
-        if let (Ident(name), Ident(typ)) = (name.clone(), typ) {
-            Ok(Param { name, typ })
-        } else {
-            Err(Error::Invalid { want: "param".to_owned(), got: name })
-        }
+        let typ = self.ident()?;
+        Ok(Param { name, typ })
     }
 
     pub fn expr(&mut self) -> Result<Expr> {
         self.primary()
     }
 
+    pub fn fn_expr(&mut self) -> Result<FnExpr> {
+        self.eat(|tok| tok == &Fn, "fn")?;
+        let name = self.ident()?;
+        self.eat(|tok| tok == &Lparen, "fn")?;
+        let params = self.list(|p| p.param())?;
+        self.eat(|tok| tok == &Rparen, "fn")?;
+        let body = self.block()?;
+        Ok(FnExpr { name, params, body })
+    }
+
     pub fn def(&mut self) -> Result<Def> {
-        todo!()
+        Ok(FnDef(self.fn_expr()?))
     }
 
     pub fn program(&mut self) -> Result<Program> {
@@ -247,7 +263,26 @@ mod test {
         assert_eq!(expected, actual);
     }
 
-    #[ignore]
+    #[test]
+    fn test_fn() {
+        let input = b" fn hello ( world: int, all: str ) { foo(27); } ";
+        let expected = FnExpr {
+            name: "hello".to_string(),
+            params: vec![
+                Param { name: "world".to_owned(), typ: "int".to_owned() },
+                Param { name: "all".to_owned(), typ: "str".to_owned() },
+            ],
+            body: Block(vec![ExprStmt(CallExpr(Call {
+                target: Box::new(IdentExpr(Primary {
+                    cargo: "foo".to_owned(),
+                })),
+                args: vec![IntExpr(Primary { cargo: 27 })],
+            }))]),
+        };
+        let actual = parse(input).fn_expr().unwrap();
+        assert_eq!(expected, actual);
+    }
+
     #[test]
     fn test_hello_world() {
         let input = b"

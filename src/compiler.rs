@@ -28,6 +28,6 @@ pub fn compile(p: impl AsRef<Path>) -> Result<()> {
     let s = scanner::scan(BufReader::new(f));
     let mut p = parser::parse(s);
     let ast = p.program();
-    println!("{:?}", ast);
+    println!("{:#?}", ast);
     Ok(())
 }
