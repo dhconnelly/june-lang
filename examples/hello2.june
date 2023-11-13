@@ -1,0 +1,11 @@
+fn greet(name: str, age: int) {
+    println("hello!", name, "aged", age);
+    println("how are you today?");
+}
+
+fn main() {
+    greet("daniel", 37);
+    greet("nina", 36);
+    greet("amelia", 5);
+    greet("margot", 3);
+}
