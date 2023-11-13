@@ -93,8 +93,7 @@ impl<R: io::BufRead> Scanner<R> {
 
     fn int(&mut self) -> Result<Token> {
         let text = self.advance_while(|b| !is_delim(b))?;
-        let int = text.parse::<i64>()?;
-        Ok(Token::Int(int))
+        Ok(Token::Int(text.parse::<i64>()?))
     }
 
     fn keyword_or_ident(&mut self) -> Result<Token> {

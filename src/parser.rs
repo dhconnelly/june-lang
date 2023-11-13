@@ -16,6 +16,12 @@ pub enum Error {
     Invalid { want: String, got: Token },
 }
 
+impl Error {
+    fn invalid(want: &str, got: Token) -> Error {
+        Error::Invalid { want: want.to_owned(), got }
+    }
+}
+
 type Result<T> = result::Result<T, Error>;
 
 pub struct Parser<R: io::BufRead> {
@@ -28,37 +34,37 @@ impl<R: io::BufRead> Parser<R> {
     }
 
     fn peek_is(&mut self, want: Token) -> bool {
-        self.scanner
-            .peek()
-            .map(|r| r.as_ref().map(|got| got == &want).unwrap_or(false))
-            .unwrap_or(false)
+        matches!(self.scanner.peek(), Some(Ok(got)) if got == &want)
     }
 
     fn advance(&mut self) -> Result<Token> {
         Ok(self.scanner.next().ok_or(Error::UnexpectedEOF)??)
     }
 
-    fn eat(
+    fn eat<T>(
         &mut self,
-        mut f: impl FnMut(&Token) -> bool,
-        typ: &str,
-    ) -> Result<Token> {
-        let result = self.advance()?;
-        if f(&result) {
-            Ok(result)
-        } else {
-            Err(Error::Invalid { want: typ.to_owned(), got: result })
+        mut f: impl FnMut(&Token) -> Option<T>,
+        want: &str,
+    ) -> Result<T> {
+        let got = self.advance()?;
+        match f(&got) {
+            Some(t) => Ok(t),
+            None => Err(Error::invalid(want, got)),
         }
     }
 
-    fn ident(&mut self) -> Result<String> {
-        // TODO: unify this with eat()
-        let result = self.advance()?;
-        if let Ident(name) = result {
-            Ok(name)
-        } else {
-            Err(Error::Invalid { want: "ident".to_owned(), got: result })
-        }
+    fn eat_tok(&mut self, want: Token) -> Result<()> {
+        self.eat(
+            |tok| if tok == &want { Some(()) } else { None },
+            &format!("{:?}", want),
+        )
+    }
+
+    fn eat_ident(&mut self) -> Result<String> {
+        self.eat(
+            |tok| if let Ident(s) = tok { Some(s.clone()) } else { None },
+            "ident",
+        )
     }
 
     fn list<T>(
@@ -70,58 +76,54 @@ impl<R: io::BufRead> Parser<R> {
             list.push(f(self)?);
         }
         while !self.peek_is(Rparen) {
-            self.eat(|tok| tok == &Comma, "list")?;
+            self.eat_tok(Comma)?;
             list.push(f(self)?);
         }
         Ok(list)
     }
 
     pub fn primary(&mut self) -> Result<Expr> {
-        let tok = self.scanner.next().ok_or(Error::UnexpectedEOF)??;
-        let prim = match tok {
+        let prim = match self.scanner.next().ok_or(Error::UnexpectedEOF)?? {
             Str(cargo) => Ok(StrExpr(Primary { cargo })),
             Ident(cargo) => Ok(IdentExpr(Primary { cargo })),
             Int(cargo) => Ok(IntExpr(Primary { cargo })),
             Lparen => {
                 let expr = self.expr()?;
-                self.eat(|tok| tok == &Rparen, "parens")?;
+                self.eat_tok(Rparen)?;
                 Ok(expr)
             }
-            _ => {
-                Err(Error::Invalid { want: String::from("primary"), got: tok })
-            }
+            tok => Err(Error::invalid("prim", tok)),
         }?;
-        match self.scanner.peek() {
-            Some(Ok(Lparen)) => {
-                self.eat(|tok| tok == &Lparen, "call")?;
-                let args = self.list(|p| p.expr())?;
-                self.eat(|tok| tok == &Rparen, "call")?;
-                Ok(CallExpr(Call { target: Box::new(prim), args }))
-            }
-            _ => Ok(prim),
+        if let Some(Ok(Lparen)) = self.scanner.peek() {
+            self.eat_tok(Lparen)?;
+            let args = self.list(|p| p.expr())?;
+            self.eat_tok(Rparen)?;
+            Ok(CallExpr(Call { target: Box::new(prim), args }))
+        } else {
+            Ok(prim)
         }
     }
 
-    fn stmt(&mut self) -> Result<Stmt> {
+    pub fn stmt(&mut self) -> Result<Stmt> {
         let expr = self.expr()?;
-        self.eat(|tok| tok == &Semi, "stmt")?;
+        self.eat_tok(Semi)?;
         Ok(ExprStmt(expr))
     }
 
     pub fn block(&mut self) -> Result<Block> {
-        self.eat(|tok| tok == &Lbrace, "block")?;
+        self.eat_tok(Lbrace)?;
         let mut stmts = Vec::new();
         while !self.peek_is(Rbrace) {
             stmts.push(self.stmt()?);
         }
-        self.eat(|tok| tok == &Rbrace, "block")?;
+        self.eat_tok(Rbrace)?;
         Ok(Block(stmts))
     }
 
     pub fn param(&mut self) -> Result<Param> {
-        let name = self.ident()?;
-        self.eat(|tok| tok == &Colon, "param")?;
-        let typ = self.ident()?;
+        let name = self.eat_ident()?;
+        self.eat_tok(Colon)?;
+        let typ = self.eat_ident()?;
         Ok(Param { name, typ })
     }
 
@@ -130,11 +132,11 @@ impl<R: io::BufRead> Parser<R> {
     }
 
     pub fn fn_expr(&mut self) -> Result<FnExpr> {
-        self.eat(|tok| tok == &Fn, "fn")?;
-        let name = self.ident()?;
-        self.eat(|tok| tok == &Lparen, "fn")?;
+        self.eat_tok(Fn)?;
+        let name = self.eat_ident()?;
+        self.eat_tok(Lparen)?;
         let params = self.list(|p| p.param())?;
-        self.eat(|tok| tok == &Rparen, "fn")?;
+        self.eat_tok(Rparen)?;
         let body = self.block()?;
         Ok(FnExpr { name, params, body })
     }
