@@ -6,7 +6,7 @@ use std::string;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
-pub enum Error {
+pub enum ErrorType {
     #[error("io: {0}")]
     IOError(#[from] io::Error),
     #[error("invalid identifier: {0}")]
@@ -19,7 +19,7 @@ pub enum Error {
     UnknownToken(u8),
 }
 
-type Result<T> = result::Result<T, Error>;
+type Result<T> = result::Result<T, ErrorType>;
 
 pub struct Scanner<R: io::BufRead> {
     bytes: iter::Peekable<io::Bytes<R>>,
@@ -28,10 +28,7 @@ pub struct Scanner<R: io::BufRead> {
 }
 
 fn is_delim(b: u8) -> bool {
-    matches!(
-        b,
-        b'(' | b')' | b'{' | b'}' | b',' | b';' | b'\n' | b' ' | b':'
-    )
+    !b.is_ascii_alphanumeric()
 }
 
 fn ident_type(s: &str) -> TokenType {
@@ -54,7 +51,7 @@ impl<R: io::BufRead> Scanner<R> {
     }
 
     fn advance(&mut self) -> Result<u8> {
-        let b = self.bytes.next().ok_or(Error::UnexpectedEOF)??;
+        let b = self.bytes.next().ok_or(ErrorType::UnexpectedEOF)??;
         self.col += 1;
         if b == b'\n' {
             self.line += 1;
@@ -64,15 +61,16 @@ impl<R: io::BufRead> Scanner<R> {
     }
 
     fn eat(&mut self, want: u8, typ: TokenType) -> Result<u8> {
-        match self.advance()? {
-            got if got == want => Ok(got),
-            _ => Err(Error::InvalidToken(typ)),
+        if self.advance()? == want {
+            Ok(want)
+        } else {
+            Err(ErrorType::InvalidToken(typ))
         }
     }
 
     fn advance_while(&mut self, f: impl Fn(u8) -> bool) -> Result<String> {
         let mut buf = Vec::new();
-        while f(self.peek().ok_or(Error::UnexpectedEOF)??) {
+        while f(self.peek().ok_or(ErrorType::UnexpectedEOF)??) {
             buf.push(self.advance().unwrap());
         }
         Ok(String::from_utf8(buf)?)
@@ -110,7 +108,7 @@ impl<R: io::BufRead> Scanner<R> {
 pub struct ScannerError {
     line: usize,
     col: usize,
-    err: Error,
+    err: ErrorType,
 }
 
 impl<R: io::BufRead> iter::Iterator for Scanner<R> {
@@ -131,7 +129,7 @@ impl<R: io::BufRead> iter::Iterator for Scanner<R> {
                 b':' => self.symbol(TokenType::Colon),
                 b'"' => self.str(),
                 b if b.is_ascii_alphabetic() => self.keyword_or_ident(),
-                b => Err(Error::UnknownToken(b)),
+                b => Err(ErrorType::UnknownToken(b)),
             })
             .map_err(|err| ScannerError { line, col, err });
         Some(result)
