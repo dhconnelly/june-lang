@@ -25,8 +25,9 @@ pub struct Compiler;
 
 pub fn compile(p: impl AsRef<Path>) -> Result<()> {
     let f = File::open(p)?;
-    let scan = scanner::scan(BufReader::new(f));
-    let ast = parser::parse(scan)?;
+    let s = scanner::scan(BufReader::new(f));
+    let mut p = parser::parse(s);
+    let ast = p.program();
     println!("{:?}", ast);
     Ok(())
 }

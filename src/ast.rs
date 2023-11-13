@@ -17,6 +17,7 @@ pub struct Primary<T> {
 pub enum Expr {
     IdentExpr(Primary<String>),
     StrExpr(Primary<String>),
+    IntExpr(Primary<i64>),
     CallExpr(Call),
 }
 
@@ -37,7 +38,7 @@ pub enum Stmt {
 pub struct Block(pub Vec<Stmt>);
 
 #[derive(Debug, PartialEq, Eq)]
-pub struct Fn {
+pub struct FnExpr {
     pub line: usize,
     pub col: usize,
     pub name: String,
@@ -47,7 +48,7 @@ pub struct Fn {
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Def {
-    Fn(Fn),
+    FnDef(FnExpr),
 }
 
 #[derive(Debug, PartialEq, Eq)]

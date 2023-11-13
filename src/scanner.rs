@@ -40,6 +40,10 @@ fn ident_type(s: &str) -> TokenType {
 }
 
 impl<R: io::BufRead> Scanner<R> {
+    pub fn eof(&mut self) -> bool {
+        self.bytes.peek().is_none()
+    }
+
     fn peek(&mut self) -> Option<Result<u8>> {
         // not all errors can be copied (e.g. io::Error), so if peek has
         // an error, we go ahead and get the owned error via advance().
@@ -90,6 +94,14 @@ impl<R: io::BufRead> Scanner<R> {
         Ok(Token { typ: TokenType::Str, text, line, col })
     }
 
+    fn int(&mut self) -> Result<Token> {
+        let (line, col) = (self.line, self.col);
+        let text = self.advance_while(|b| !is_delim(b))?;
+        text.parse::<i64>()
+            .map_err(|_| ErrorType::InvalidToken(TokenType::Int))?;
+        Ok(Token { typ: TokenType::Int, text, line, col })
+    }
+
     fn keyword_or_ident(&mut self) -> Result<Token> {
         let (line, col) = (self.line, self.col);
         let text = self.advance_while(|b| !is_delim(b))?;
@@ -128,6 +140,7 @@ impl<R: io::BufRead> iter::Iterator for Scanner<R> {
                 b';' => self.symbol(TokenType::Semi),
                 b':' => self.symbol(TokenType::Colon),
                 b'"' => self.str(),
+                b if b.is_ascii_digit() => self.int(),
                 b if b.is_ascii_alphabetic() => self.keyword_or_ident(),
                 b => Err(ErrorType::UnknownToken(b)),
             })
@@ -166,7 +179,7 @@ mod tests {
         use TokenType::*;
         let input = b"
             fn foo(bar: int, baz: str) {
-                println(\"hello, world\");
+                println(\"hello, world\", 27);
             }
         ";
         let toks = scan_all(input).unwrap();
@@ -186,8 +199,10 @@ mod tests {
             tok(Ident, "println", 3, 17),
             tok(Lparen, "(", 3, 24),
             tok(Str, "hello, world", 3, 25),
-            tok(Rparen, ")", 3, 39),
-            tok(Semi, ";", 3, 40),
+            tok(Comma, ",", 3, 39),
+            tok(Int, "27", 3, 41),
+            tok(Rparen, ")", 3, 43),
+            tok(Semi, ";", 3, 44),
             tok(Rbrace, "}", 4, 13),
         ];
         assert_eq!(expected, toks);
