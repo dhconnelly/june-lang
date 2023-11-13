@@ -28,6 +28,7 @@ impl From<&io::Error> for Error {
     }
 }
 
+// TODO: figure out how to combine this with the ref implementation
 impl From<io::Error> for Error {
     fn from(err: io::Error) -> Error {
         Error::IOError(format!("{}", err))
@@ -69,7 +70,7 @@ impl<R: io::BufRead> Scanner<R> {
         }
     }
 
-    fn advance_while(&mut self, f: impl Fn(u8) -> bool) -> Result<String> {
+    fn advance_while<F: Fn(u8) -> bool>(&mut self, f: F) -> Result<String> {
         let mut buf = Vec::new();
         while f(self.peek().ok_or(Error::UnexpectedEOF)??) {
             buf.push(self.advance().unwrap());

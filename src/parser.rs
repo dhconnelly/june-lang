@@ -35,9 +35,9 @@ impl<R: io::BufRead> Parser<R> {
         Ok(self.scanner.next().ok_or(Error::UnexpectedEOF)??)
     }
 
-    fn eat<T>(
+    fn eat<T, F: FnMut(&Token) -> Option<T>>(
         &mut self,
-        mut f: impl FnMut(&Token) -> Option<T>,
+        mut f: F,
         want: String,
     ) -> Result<T> {
         let got = self.advance()?;
@@ -61,9 +61,9 @@ impl<R: io::BufRead> Parser<R> {
         )
     }
 
-    fn list<T>(
+    fn list<T, F: FnMut(&mut Self) -> Result<T>>(
         &mut self,
-        mut f: impl FnMut(&mut Self) -> Result<T>,
+        mut f: F,
     ) -> Result<Vec<T>> {
         let mut list = Vec::new();
         if !self.peek_is(Rparen) {
@@ -161,9 +161,9 @@ mod test {
         super::parse(s)
     }
 
-    fn parse_all<T>(
+    fn parse_all<T, F: FnMut(&mut Parser<&[u8]>) -> Result<T>>(
         input: &[u8],
-        mut f: impl FnMut(&mut Parser<&[u8]>) -> Result<T>,
+        mut f: F,
     ) -> Vec<T> {
         let mut p = parse(input);
         let mut v = Vec::new();
