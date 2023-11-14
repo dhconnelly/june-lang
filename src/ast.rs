@@ -25,12 +25,14 @@ where
     <Self as ASTSpec>::ExprCargo: fmt::Debug + Clone + PartialEq + Eq,
     <Self as ASTSpec>::ParamCargo: fmt::Debug + Clone + PartialEq + Eq,
     <Self as ASTSpec>::FuncCargo: fmt::Debug + Clone + PartialEq + Eq,
+    <Self as ASTSpec>::LetCargo: fmt::Debug + Clone + PartialEq + Eq,
 {
     type CallCargo;
     type IdentCargo;
     type ExprCargo;
     type ParamCargo;
     type FuncCargo;
+    type LetCargo;
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -42,6 +44,7 @@ impl ASTSpec for UntypedAST {
     type ExprCargo = ();
     type ParamCargo = ();
     type FuncCargo = ();
+    type LetCargo = ();
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -53,6 +56,7 @@ impl ASTSpec for TypedAST {
     type ExprCargo = Type;
     type ParamCargo = Type;
     type FuncCargo = FnType;
+    type LetCargo = Type;
 }
 
 // =============================================================================
@@ -193,11 +197,24 @@ impl Typed for TypedParam {
 }
 
 // =============================================================================
+// Binding
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct Binding<AST: ASTSpec = UntypedAST> {
+    pub name: String,
+    pub typ: TypeSpec,
+    pub expr: Expr,
+    pub cargo: AST::LetCargo,
+}
+
+// =============================================================================
 // Stmt
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Stmt<AST: ASTSpec = UntypedAST> {
     ExprStmt(Expr<AST>),
+    BlockStmt(Block<AST>),
+    LetStmt(Binding),
 }
 
 pub type TypedStmt = Stmt<TypedAST>;

@@ -68,6 +68,8 @@ pub fn analyze_expr(expr: Expr, ctx: &SymbolTable) -> Result<TypedExpr> {
 pub fn analyze_stmt(stmt: Stmt, ctx: &SymbolTable) -> Result<()> {
     match stmt {
         Stmt::ExprStmt(expr) => analyze_expr(expr, ctx).map(|_| ()),
+        Stmt::LetStmt(_expr) => todo!(),
+        Stmt::BlockStmt(_block) => todo!(),
     }
 }
 

@@ -98,10 +98,33 @@ impl<R: io::BufRead> Parser<R> {
         }
     }
 
-    pub fn stmt(&mut self) -> Result<Stmt> {
+    pub fn type_spec(&mut self) -> Result<TypeSpec> {
+        // TODO: parse more complicated types
+        Ok(TypeSpec::Simple(self.eat_ident()?))
+    }
+
+    pub fn expr_stmt(&mut self) -> Result<Stmt> {
         let expr = self.expr()?;
         self.eat_tok(Semi)?;
         Ok(ExprStmt(expr))
+    }
+
+    pub fn let_stmt(&mut self) -> Result<Stmt> {
+        self.eat_tok(Let)?;
+        let name = self.eat_ident()?;
+        self.eat_tok(Colon)?;
+        let typ = self.type_spec()?;
+        self.eat_tok(Eq)?;
+        let expr = self.expr()?;
+        self.eat_tok(Semi)?;
+        Ok(LetStmt(Binding { name, typ, expr, cargo: () }))
+    }
+
+    pub fn stmt(&mut self) -> Result<Stmt> {
+        match self.scanner.peek() {
+            Some(Ok(Let)) => self.let_stmt(),
+            _ => self.expr_stmt(),
+        }
     }
 
     pub fn block(&mut self) -> Result<Block> {
@@ -117,7 +140,7 @@ impl<R: io::BufRead> Parser<R> {
     pub fn param(&mut self) -> Result<Param> {
         let name = self.eat_ident()?;
         self.eat_tok(Colon)?;
-        let typ = TypeSpec::Simple(self.eat_ident()?);
+        let typ = self.type_spec()?;
         Ok(Param::untyped(name, typ))
     }
 
@@ -131,8 +154,8 @@ impl<R: io::BufRead> Parser<R> {
         self.eat_tok(Lparen)?;
         let params = self.list(|p| p.param())?;
         self.eat_tok(Rparen)?;
+        // TODO: parse return type
         let body = self.block()?;
-        // TODO: parse type spec
         Ok(Func::untyped(name, params, body, TypeSpec::Void))
     }
 
@@ -245,6 +268,19 @@ mod test {
         let expected =
             Param::untyped("foo", TypeSpec::Simple(String::from("bar")));
         let actual = parse(input).param().unwrap();
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn test_let() {
+        let input = b"let foo: int = 7;";
+        let expected = LetStmt(Binding {
+            name: String::from("foo"),
+            typ: TypeSpec::Simple(String::from("int")),
+            expr: IntExpr(Literal::new(7)),
+            cargo: (),
+        });
+        let actual = parse(input).let_stmt().unwrap();
         assert_eq!(expected, actual);
     }
 

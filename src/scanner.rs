@@ -49,6 +49,7 @@ fn ident_type(s: &str) -> Token {
     use Token::*;
     match s {
         "fn" => FnTok,
+        "let" => Let,
         _ => IdentTok(String::from(s)),
     }
 }
@@ -116,15 +117,17 @@ impl<R: io::BufRead> iter::Iterator for Scanner<R> {
     type Item = result::Result<Token, Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
+        use Token::*;
         self.skip_whitespace();
         let result = self.peek()?.and_then(|b| match b {
-            b'(' => self.advance_emit(1, Token::Lparen),
-            b')' => self.advance_emit(1, Token::Rparen),
-            b'{' => self.advance_emit(1, Token::Lbrace),
-            b'}' => self.advance_emit(1, Token::Rbrace),
-            b',' => self.advance_emit(1, Token::Comma),
-            b';' => self.advance_emit(1, Token::Semi),
-            b':' => self.advance_emit(1, Token::Colon),
+            b'=' => self.advance_emit(1, Eq),
+            b'(' => self.advance_emit(1, Lparen),
+            b')' => self.advance_emit(1, Rparen),
+            b'{' => self.advance_emit(1, Lbrace),
+            b'}' => self.advance_emit(1, Rbrace),
+            b',' => self.advance_emit(1, Comma),
+            b';' => self.advance_emit(1, Semi),
+            b':' => self.advance_emit(1, Colon),
             b'"' => self.str(),
             b if b.is_ascii_digit() => self.int(),
             b if b.is_ascii_alphabetic() => self.keyword_or_ident(),
@@ -161,6 +164,9 @@ mod tests {
         let input = b"
             fn foo(bar: int, baz: str) {
                 println(\"hello, world\", 27);
+                {
+                    let foo: int = 7;
+                }
             }
         ";
         let toks = scan_all(input).unwrap();
@@ -184,6 +190,15 @@ mod tests {
             Int(27),
             Rparen,
             Semi,
+            Lbrace,
+            Let,
+            IdentTok(String::from("foo")),
+            Colon,
+            IdentTok(String::from("int")),
+            Eq,
+            Int(7),
+            Semi,
+            Rbrace,
             Rbrace,
         ];
         assert_eq!(expected, toks);

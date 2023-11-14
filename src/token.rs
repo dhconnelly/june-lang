@@ -11,4 +11,6 @@ pub enum Token {
     IdentTok(String),
     Colon,
     Int(i64),
+    Eq,
+    Let,
 }
