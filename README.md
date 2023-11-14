@@ -59,7 +59,7 @@ For more details on wasm, wasi, and wasmtime:
 -   [Wasmtime documentation](https://docs.wasmtime.dev/)
 -   [WASI Document Guide](https://github.com/bytecodealliance/wasmtime/blob/main/docs/WASI-documents.md)
 
-This is my seventh language implementation. Here are the previous ones:
+This is my eighth hobby language implementation. Here are the previous ones:
 
 -   [parents](https://github.com/dhconnelly/parents): A bytecode VM and
     compiler for a dynamic language. Implemented in TypeScript. Manages its own
@@ -74,10 +74,22 @@ This is my seventh language implementation. Here are the previous ones:
 -   [crab](https://github.com/dhconnelly/crab) (incomplete): A bytecode VM and
     compiler for a simple dynamic language. Implemented in Rust. I never
     implemented garbage collection and assignment just copies entire values.
+    This was my first experience writing a compiler from scratch.
 -   [yalig](https://github.com/dhconnelly/yalig): Another interpreter for a
     Scheme variant, written in Go.
--   [ts](https://github.com/dhconnelly/ts): An extremely simple interpreter
-    implemented in C++.
+-   [adso](https://github.com/dhconnelly/adso-js): A very simple interpreter
+    implemented in JavaScript.
+-   [ts](https://github.com/dhconnelly/ts): Another very simple interpreter
+    implemented in C++. This was my first experience writing an interpreter
+    from scratch.
+
+None of these languages are interesting: it's all Scheme variants or JavaScript
+lookalikes. June is my first attempt at creating a statically typed language.
+Despite having used a lot of languages -- I've written C, C++, Objective-C,
+Java, Scala, JavaScript, TypeScript, Python, and Go professionally (not
+counting domain-specific languages), plus Rust, Clojure, Haskell, OCaml, and
+Scheme for hobby stuff -- I'm less interested in language design than
+implementation :)
 
 I read a lot of stuff that made this possible. Here are the resources that
 helped me the most:
