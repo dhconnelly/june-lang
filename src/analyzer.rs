@@ -19,10 +19,12 @@ pub enum Error {
 
 type Result<T> = result::Result<T, Error>;
 
-// TODO: avoid copying the expression
 type SymbolTable = HashMap<String, TypedExpr>;
 
-fn analyze_all(exprs: Vec<Expr>, ctx: &SymbolTable) -> Result<Vec<TypedExpr>> {
+fn analyze_all(
+    exprs: Vec<Expr>,
+    ctx: &mut SymbolTable,
+) -> Result<Vec<TypedExpr>> {
     let mut texprs = Vec::new();
     for expr in exprs {
         texprs.push(analyze_expr(expr, ctx)?);
@@ -39,7 +41,7 @@ fn check_all(want: &[Type], got: &[TypedExpr]) -> Result<()> {
     }
 }
 
-pub fn analyze_expr(expr: Expr, ctx: &SymbolTable) -> Result<TypedExpr> {
+pub fn analyze_expr(expr: Expr, ctx: &mut SymbolTable) -> Result<TypedExpr> {
     match expr {
         IntExpr(prim) => Ok(IntExpr(prim)),
         StrExpr(prim) => Ok(StrExpr(prim)),
@@ -65,7 +67,7 @@ pub fn analyze_expr(expr: Expr, ctx: &SymbolTable) -> Result<TypedExpr> {
     }
 }
 
-pub fn analyze_stmt(stmt: Stmt, ctx: &SymbolTable) -> Result<()> {
+pub fn analyze_stmt(stmt: Stmt, ctx: &mut SymbolTable) -> Result<()> {
     match stmt {
         Stmt::ExprStmt(expr) => analyze_expr(expr, ctx).map(|_| ()),
         Stmt::LetStmt(_expr) => todo!(),
@@ -73,7 +75,7 @@ pub fn analyze_stmt(stmt: Stmt, ctx: &SymbolTable) -> Result<()> {
     }
 }
 
-pub fn analyze_block(block: Block, ctx: &SymbolTable) -> Result<()> {
+pub fn analyze_block(block: Block, ctx: &mut SymbolTable) -> Result<()> {
     let Block(stmts) = block;
     stmts.into_iter().try_for_each(|stmt| analyze_stmt(stmt, ctx))
 }
@@ -97,11 +99,11 @@ mod test {
         T,
         U: Typed,
         F: Fn(&mut parser::Parser<&[u8]>) -> parser::Result<T>,
-        G: Fn(T) -> Result<U>,
+        G: FnMut(T) -> Result<U>,
     >(
         inputs: &[&[u8]],
         parse: F,
-        analyze: G,
+        mut analyze: G,
     ) -> Vec<Result<Type>> {
         let mut v = Vec::new();
         for input in inputs {
@@ -115,7 +117,7 @@ mod test {
 
     #[test]
     fn test_calls() {
-        let mut ctx = HashMap::new();
+        let mut ctx = SymbolTable::new();
         ctx.insert(
             String::from("println"),
             TypedExpr::FuncExpr(TypedFunc {
@@ -154,13 +156,13 @@ mod test {
             Ok(Type::Void),
         ];
         let actual =
-            analyze_all(inputs, |p| p.expr(), |e| analyze_expr(e, &ctx));
+            analyze_all(inputs, |p| p.expr(), |e| analyze_expr(e, &mut ctx));
         assert_eq!(expected, actual);
     }
 
     #[test]
     fn test_idents() {
-        let mut ctx = HashMap::new();
+        let mut ctx = SymbolTable::new();
         ctx.insert(String::from("foo"), TypedExpr::IntExpr(Literal::new(27)));
         ctx.insert(
             String::from("bar"),
@@ -183,7 +185,7 @@ mod test {
             Err(Error::Undefined(String::from("baz"))),
         ];
         let actual =
-            analyze_all(inputs, |p| p.expr(), |e| analyze_expr(e, &ctx));
+            analyze_all(inputs, |p| p.expr(), |e| analyze_expr(e, &mut ctx));
         assert_eq!(expected, actual);
     }
 
@@ -197,7 +199,7 @@ mod test {
         let actual: Vec<TypedExpr> = inputs
             .iter()
             .map(|input| parse(*input).expr().unwrap())
-            .map(|expr| analyze_expr(expr, &HashMap::new()).unwrap())
+            .map(|expr| analyze_expr(expr, &mut SymbolTable::new()).unwrap())
             .collect();
         assert_eq!(expected, actual);
     }
