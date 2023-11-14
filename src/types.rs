@@ -15,24 +15,7 @@ pub enum Type {
     Fn(FnType),
 }
 
-#[derive(Debug, Error, PartialEq)]
-#[error("type mismatch: want {want}, got {got:?}")]
-pub struct Error {
-    pub want: String,
-    pub got: Type,
-}
-
-pub type Result<T> = result::Result<T, Error>;
-
 impl Type {
-    pub fn as_fn(&self) -> Result<FnType> {
-        if let Type::Fn(f) = self {
-            Ok(f.clone())
-        } else {
-            Err(Error { want: String::from("Fn"), got: self.clone() })
-        }
-    }
-
     pub fn check(&self, other: &Type) -> Result<()> {
         if self == other {
             Ok(())
@@ -45,3 +28,19 @@ impl Type {
 pub trait Typed {
     fn typ(&self) -> &Type;
 }
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct Resolution {
+    pub typ: Type,
+    pub frame_depth: usize,
+    pub frame_offset: usize,
+}
+
+#[derive(Debug, Error, PartialEq)]
+#[error("type mismatch: want {want}, got {got:?}")]
+pub struct Error {
+    pub want: String,
+    pub got: Type,
+}
+
+pub type Result<T> = result::Result<T, Error>;

@@ -41,28 +41,22 @@ fn check_all(want: &[Type], got: &[TypedExpr]) -> Result<()> {
 
 pub fn analyze_expr(expr: Expr, ctx: &SymbolTable) -> Result<TypedExpr> {
     match expr {
-        IntExpr(prim) => Ok(IntExpr(TypedPrimary {
-            cargo: prim.cargo,
-            assoc: Type::Int,
-        })),
-        StrExpr(prim) => Ok(StrExpr(TypedPrimary {
-            cargo: prim.cargo,
-            assoc: Type::Str,
-        })),
+        IntExpr(prim) => Ok(IntExpr(prim)),
+        StrExpr(prim) => Ok(StrExpr(prim)),
         IdentExpr(prim) => {
-            let name = prim.cargo;
+            let name = prim.name;
             let expr = ctx.get(&name).ok_or(Error::Undefined(name.clone()))?;
             Ok(expr.clone())
         }
         CallExpr(call) => match analyze_expr(*call.target, ctx)? {
             FuncExpr(f) => {
-                let fn_typ = f.typ().as_fn().unwrap();
+                let fn_typ = f.cargo.clone();
                 let args = analyze_all(call.args, ctx)?;
                 check_all(&fn_typ.params, &args)?;
                 Ok(CallExpr(TypedCall {
                     target: Box::new(FuncExpr(f)),
                     args,
-                    assoc: *fn_typ.ret,
+                    cargo: *fn_typ.ret,
                 }))
             }
             typ => Err(Error::InvalidCallable(typ.typ().clone())),
@@ -128,18 +122,20 @@ mod test {
                     Param {
                         name: String::from("left"),
                         typ: TypeSpec::Simple(String::from("int")),
+                        cargo: Type::Int,
                     },
                     Param {
                         name: String::from("right"),
                         typ: TypeSpec::Simple(String::from("str")),
+                        cargo: Type::Int,
                     },
                 ],
                 body: Block(vec![]),
                 ret: TypeSpec::Void,
-                assoc: Type::Fn(FnType {
+                cargo: FnType {
                     params: vec![Type::Int, Type::Str],
                     ret: Box::new(Type::Void),
-                }),
+                },
             }),
         );
         let inputs: &[&[u8]] = &[
@@ -163,10 +159,7 @@ mod test {
     #[test]
     fn test_idents() {
         let mut ctx = HashMap::new();
-        ctx.insert(
-            String::from("foo"),
-            TypedExpr::IntExpr(TypedPrimary { cargo: 27, assoc: Type::Int }),
-        );
+        ctx.insert(String::from("foo"), TypedExpr::IntExpr(Literal::new(27)));
         ctx.insert(
             String::from("bar"),
             TypedExpr::CallExpr(TypedCall {
@@ -175,13 +168,10 @@ mod test {
                     params: vec![],
                     body: Block(vec![]),
                     ret: TypeSpec::Simple(String::from("str")),
-                    assoc: Type::Fn(FnType {
-                        params: vec![],
-                        ret: Box::new(Type::Void),
-                    }),
+                    cargo: FnType { params: vec![], ret: Box::new(Type::Void) },
                 })),
                 args: vec![],
-                assoc: Type::Str,
+                cargo: Type::Str,
             }),
         );
         let inputs: &[&[u8]] = &[b"foo", b"bar", b"baz"];
@@ -199,11 +189,8 @@ mod test {
     fn test_literals() {
         let inputs: &[&[u8]] = &[b"27", b"\"hello, world\""];
         let expected = vec![
-            TypedExpr::IntExpr(Primary { cargo: 27, assoc: Type::Int }),
-            TypedExpr::StrExpr(Primary {
-                cargo: String::from("hello, world"),
-                assoc: Type::Str,
-            }),
+            TypedExpr::IntExpr(Literal::new(27)),
+            TypedExpr::StrExpr(Literal::new("hello, world")),
         ];
         let actual: Vec<TypedExpr> = inputs
             .iter()

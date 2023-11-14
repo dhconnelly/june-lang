@@ -8,7 +8,7 @@ pub enum Token {
     Semi,
     Comma,
     Str(String),
-    Ident(String),
+    IdentTok(String),
     Colon,
     Int(i64),
 }

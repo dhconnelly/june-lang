@@ -49,7 +49,7 @@ fn ident_type(s: &str) -> Token {
     use Token::*;
     match s {
         "fn" => FnTok,
-        _ => Ident(String::from(s)),
+        _ => IdentTok(String::from(s)),
     }
 }
 
@@ -166,18 +166,18 @@ mod tests {
         let toks = scan_all(input).unwrap();
         let expected = vec![
             FnTok,
-            Ident(String::from("foo")),
+            IdentTok(String::from("foo")),
             Lparen,
-            Ident(String::from("bar")),
+            IdentTok(String::from("bar")),
             Colon,
-            Ident(String::from("int")),
+            IdentTok(String::from("int")),
             Comma,
-            Ident(String::from("baz")),
+            IdentTok(String::from("baz")),
             Colon,
-            Ident(String::from("str")),
+            IdentTok(String::from("str")),
             Rparen,
             Lbrace,
-            Ident(String::from("println")),
+            IdentTok(String::from("println")),
             Lparen,
             Str(String::from("hello, world")),
             Comma,
