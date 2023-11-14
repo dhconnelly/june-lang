@@ -67,8 +67,8 @@ impl Call<UntypedAST> {
 pub type TypedCall = Call<TypedAST>;
 
 impl Typed for TypedCall {
-    fn typ(&self) -> &Type {
-        &self.cargo
+    fn typ(&self) -> Type {
+        self.cargo.clone()
     }
 }
 
@@ -87,14 +87,14 @@ impl<T: fmt::Debug + PartialEq + Eq + Clone> Literal<T> {
 }
 
 impl Typed for Literal<String> {
-    fn typ(&self) -> &Type {
-        &Type::Str
+    fn typ(&self) -> Type {
+        Type::Str
     }
 }
 
 impl Typed for Literal<i64> {
-    fn typ(&self) -> &Type {
-        &Type::Int
+    fn typ(&self) -> Type {
+        Type::Int
     }
 }
 
@@ -116,8 +116,8 @@ impl Ident<UntypedAST> {
 pub type TypedIdent = Ident<TypedAST>;
 
 impl Typed for TypedIdent {
-    fn typ(&self) -> &Type {
-        &self.cargo.typ
+    fn typ(&self) -> Type {
+        self.cargo.typ.clone()
     }
 }
 
@@ -136,7 +136,7 @@ pub enum Expr<AST: ASTSpec = UntypedAST> {
 pub type TypedExpr = Expr<TypedAST>;
 
 impl Typed for TypedExpr {
-    fn typ(&self) -> &Type {
+    fn typ(&self) -> Type {
         use Expr::*;
         match self {
             IdentExpr(expr) => expr.typ(),
@@ -179,8 +179,8 @@ impl Param<UntypedAST> {
 pub type TypedParam = Param<TypedAST>;
 
 impl Typed for TypedParam {
-    fn typ(&self) -> &Type {
-        &self.cargo
+    fn typ(&self) -> Type {
+        self.cargo.clone()
     }
 }
 
@@ -228,8 +228,8 @@ impl Func<UntypedAST> {
 pub type TypedFunc = Func<TypedAST>;
 
 impl Typed for TypedFunc {
-    fn typ(&self) -> &Type {
-        &self.cargo.ret
+    fn typ(&self) -> Type {
+        Type::Fn(self.cargo.clone())
     }
 }
 

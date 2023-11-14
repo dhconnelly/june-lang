@@ -26,7 +26,7 @@ impl Type {
 }
 
 pub trait Typed {
-    fn typ(&self) -> &Type;
+    fn typ(&self) -> Type;
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]

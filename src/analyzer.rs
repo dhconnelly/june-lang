@@ -35,7 +35,7 @@ fn check_all(want: &[Type], got: &[TypedExpr]) -> Result<()> {
         Err(Error::Arity { want: want.len(), got: got.len() })
     } else {
         let mut pairs = want.iter().zip(got.iter());
-        Ok(pairs.try_for_each(|(want, got)| want.check(got.typ()))?)
+        Ok(pairs.try_for_each(|(want, got)| want.check(&got.typ()))?)
     }
 }
 
