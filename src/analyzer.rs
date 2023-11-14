@@ -15,10 +15,13 @@ pub enum Error {
     Type(#[from] types::Error),
     #[error("not callable: {0:?}")]
     InvalidCallable(Type),
+    #[error("unknown type: {0}")]
+    UnknownType(String),
 }
 
 pub type Result<T> = result::Result<T, Error>;
 
+#[derive(Debug)]
 struct SymbolInfo {
     idx: usize,
     typ: Type,
@@ -26,6 +29,7 @@ struct SymbolInfo {
 
 type StackFrame = HashMap<String, SymbolInfo>;
 
+#[derive(Debug)]
 struct SymbolTable {
     // TODO: supporting forward references will require supporting empty values
     // in the globals table
@@ -45,6 +49,10 @@ impl SymbolTable {
 
     fn push_frame(&mut self) {
         self.frames.push(HashMap::new());
+    }
+
+    fn pop_frame(&mut self) {
+        self.frames.pop().unwrap();
     }
 
     fn get_global(&self, name: &str) -> Option<Resolution> {
@@ -119,17 +127,48 @@ fn analyze_expr(expr: Expr, ctx: &mut SymbolTable) -> Result<TypedExpr> {
     }
 }
 
-fn analyze_stmt(stmt: Stmt, ctx: &mut SymbolTable) -> Result<()> {
-    match stmt {
-        Stmt::ExprStmt(expr) => analyze_expr(expr, ctx).map(|_| ()),
-        Stmt::LetStmt(_expr) => todo!(),
-        Stmt::BlockStmt(_block) => todo!(),
+fn resolve_type(typ: &TypeSpec, ctx: &SymbolTable) -> Result<Type> {
+    // TODO: handle more complex types
+    match typ {
+        TypeSpec::Void => Ok(Type::Void),
+        TypeSpec::Simple(typ) if "int" == typ => Ok(Type::Int),
+        TypeSpec::Simple(typ) if "str" == typ => Ok(Type::Str),
+        TypeSpec::Simple(typ) => Err(Error::UnknownType(typ.into())),
     }
 }
 
-fn analyze_block(block: Block, ctx: &mut SymbolTable) -> Result<()> {
-    let Block(stmts) = block;
-    stmts.into_iter().try_for_each(|stmt| analyze_stmt(stmt, ctx))
+fn analyze_let(stmt: Binding, ctx: &mut SymbolTable) -> Result<TypedStmt> {
+    let name = stmt.name;
+    let typ = resolve_type(&stmt.typ, ctx)?;
+    let expr = analyze_expr(stmt.expr, ctx)?;
+    typ.check(&expr.typ())?;
+    ctx.insert(name.clone(), typ.clone());
+    Ok(TypedStmt::LetStmt(TypedBinding {
+        name,
+        typ: stmt.typ,
+        expr,
+        cargo: typ,
+    }))
+}
+
+fn analyze_stmt(stmt: Stmt, ctx: &mut SymbolTable) -> Result<TypedStmt> {
+    match stmt {
+        Stmt::ExprStmt(expr) => Ok(Stmt::ExprStmt(analyze_expr(expr, ctx)?)),
+        Stmt::LetStmt(stmt) => analyze_let(stmt, ctx),
+        Stmt::BlockStmt(block) => {
+            Ok(Stmt::BlockStmt(analyze_block(block, ctx)?))
+        }
+    }
+}
+
+fn analyze_block(block: Block, ctx: &mut SymbolTable) -> Result<TypedBlock> {
+    ctx.push_frame();
+    let mut stmts = Vec::new();
+    for stmt in block.0 {
+        stmts.push(analyze_stmt(stmt, ctx)?);
+    }
+    ctx.pop_frame();
+    Ok(Block::<TypedAST>(stmts))
 }
 
 fn analyze_def(def: Def, ctx: &mut SymbolTable) -> Result<TypedDef> {
@@ -174,6 +213,124 @@ mod test {
             v.push(analyze(node).map(|nd| nd.typ().clone()))
         }
         v
+    }
+
+    #[test]
+    fn test_blocks() {
+        let mut ctx = SymbolTable::new();
+        let input = b"{
+            let x: int = 7;
+            let y: int = x;
+            {
+                let z: int = y;
+                let y: int = x;
+                let w: int = y;
+                {
+                    let x: int = 7;
+                }
+                x;
+            }
+            y;
+        }";
+        let expected = Block(vec![
+            Stmt::LetStmt(Binding {
+                name: String::from("x"),
+                typ: TypeSpec::Simple(String::from("int")),
+                expr: IntExpr(Literal { value: 7 }),
+                cargo: Type::Int,
+            }),
+            Stmt::LetStmt(Binding {
+                name: String::from("y"),
+                typ: TypeSpec::Simple(String::from("int")),
+                expr: IdentExpr(Ident {
+                    name: String::from("x"),
+                    cargo: Resolution {
+                        typ: Type::Int,
+                        reference: Reference::Stack {
+                            frame_depth: 0,
+                            frame_idx: 0,
+                        },
+                    },
+                }),
+                cargo: Type::Int,
+            }),
+            Stmt::BlockStmt(Block(vec![
+                Stmt::LetStmt(Binding {
+                    name: String::from("z"),
+                    typ: TypeSpec::Simple(String::from("int")),
+                    expr: IdentExpr(Ident {
+                        name: String::from("y"),
+                        cargo: Resolution {
+                            typ: Type::Int,
+                            reference: Reference::Stack {
+                                frame_depth: 1,
+                                frame_idx: 1,
+                            },
+                        },
+                    }),
+                    cargo: Type::Int,
+                }),
+                Stmt::LetStmt(Binding {
+                    name: String::from("y"),
+                    typ: TypeSpec::Simple(String::from("int")),
+                    expr: IdentExpr(Ident {
+                        name: String::from("x"),
+                        cargo: Resolution {
+                            typ: Type::Int,
+                            reference: Reference::Stack {
+                                frame_depth: 1,
+                                frame_idx: 0,
+                            },
+                        },
+                    }),
+                    cargo: Type::Int,
+                }),
+                Stmt::LetStmt(Binding {
+                    name: String::from("w"),
+                    typ: TypeSpec::Simple(String::from("int")),
+                    expr: IdentExpr(Ident {
+                        name: String::from("y"),
+                        cargo: Resolution {
+                            typ: Type::Int,
+                            reference: Reference::Stack {
+                                frame_depth: 0,
+                                frame_idx: 1,
+                            },
+                        },
+                    }),
+                    cargo: Type::Int,
+                }),
+                Stmt::BlockStmt(Block(vec![Stmt::LetStmt(Binding {
+                    name: String::from("x"),
+                    typ: TypeSpec::Simple(String::from("int")),
+                    expr: IntExpr(Literal { value: 7 }),
+                    cargo: Type::Int,
+                })])),
+                Stmt::ExprStmt(IdentExpr(Ident {
+                    name: String::from("x"),
+                    cargo: Resolution {
+                        typ: Type::Int,
+                        reference: Reference::Stack {
+                            frame_depth: 1,
+                            frame_idx: 0,
+                        },
+                    },
+                })),
+            ])),
+            Stmt::ExprStmt(IdentExpr(Ident {
+                name: String::from("y"),
+                cargo: Resolution {
+                    typ: Type::Int,
+                    reference: Reference::Stack {
+                        frame_depth: 0,
+                        frame_idx: 1,
+                    },
+                },
+            })),
+        ]);
+        let block = parse(input).block().unwrap();
+        let actual = analyze_block(block, &mut ctx).unwrap();
+        assert_eq!(expected, actual);
     }
 
     #[test]

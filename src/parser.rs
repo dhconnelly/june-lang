@@ -123,6 +123,7 @@ impl<R: io::BufRead> Parser<R> {
     pub fn stmt(&mut self) -> Result<Stmt> {
         match self.scanner.peek() {
             Some(Ok(Let)) => self.let_stmt(),
+            Some(Ok(Lbrace)) => Ok(BlockStmt(self.block()?)),
             _ => self.expr_stmt(),
         }
     }

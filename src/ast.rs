@@ -203,9 +203,11 @@ impl Typed for TypedParam {
 pub struct Binding<AST: ASTSpec = UntypedAST> {
     pub name: String,
     pub typ: TypeSpec,
-    pub expr: Expr,
+    pub expr: Expr<AST>,
     pub cargo: AST::LetCargo,
 }
+
+pub type TypedBinding = Binding<TypedAST>;
 
 // =============================================================================
 // Stmt
@@ -214,7 +216,7 @@ pub struct Binding<AST: ASTSpec = UntypedAST> {
 pub enum Stmt<AST: ASTSpec = UntypedAST> {
     ExprStmt(Expr<AST>),
     BlockStmt(Block<AST>),
-    LetStmt(Binding),
+    LetStmt(Binding<AST>),
 }
 
 pub type TypedStmt = Stmt<TypedAST>;
