@@ -27,14 +27,12 @@ struct SymbolInfo {
     typ: Type,
 }
 
-type StackFrame = HashMap<String, SymbolInfo>;
-
 #[derive(Debug)]
 struct SymbolTable {
     // TODO: supporting forward references will require supporting empty values
     // in the globals table
     globals: HashMap<String, SymbolInfo>,
-    frames: Vec<StackFrame>,
+    frames: Vec<HashMap<String, SymbolInfo>>,
 }
 
 impl SymbolTable {
