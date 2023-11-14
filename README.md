@@ -1,9 +1,10 @@
 # june-lang
 
-a small statically-typed language that runs on wasm
+a small statically-typed language that runs on [wasm](https://webassembly.org/)
 
 ## Features
 
+- [ ] builds [wasi](https://wasi.dev) binaries that can be executed by [wasmtime](https://wasmtime.dev)
 - [ ] static typing: programs are checked during compilation
 - [ ] basic types: int, float, bool, string
 - [ ] the usual arithmetic and logical operators
@@ -52,6 +53,12 @@ For more usage information, run `junec --help`. For examples, see `examples/`.
 
 ## Previous work and references
 
+For more details on wasm, wasi, and wasmtime:
+
+-   [WebAssembly Specification](https://webassembly.github.io/spec/core/)
+-   [Wasmtime documentation](https://docs.wasmtime.dev/)
+-   [WASI Document Guide](https://github.com/bytecodealliance/wasmtime/blob/main/docs/WASI-documents.md)
+
 This is my seventh language implementation. Here are the previous ones:
 
 -   [parents](https://github.com/dhconnelly/parents): A bytecode VM and
@@ -91,7 +98,7 @@ paper](https://research.tue.nl/en/studentTheses/gcl-viewer)). For various
 reasons I didn't stay long enough to have any impact, but I was lucky to have
 the opportunity to review a bunch of code written by the team for a new
 implementation of the language, including some of the bytecode VM and compiler
-as well as garbage collection. This was a good (if brief) learning experience.
+as well as garbage collection. This was a good (if short) learning experience.
 
 ## License
 
