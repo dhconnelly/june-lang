@@ -9,6 +9,14 @@ use std::fmt;
 // type via associated objects, a pattern similar to C++ policy-based design.
 //
 // This is overkill. But it's a fun exercise :)
+//
+// More ideas:
+//
+// - http://lambda-the-ultimate.org/node/4170
+// - http://blog.ezyang.com/2013/05/the-ast-typing-problem/
+// - https://news.ycombinator.com/item?id=37114976
+// - https://www.reddit.com/r/ProgrammingLanguages/comments/b7fvlv/ast_and_tast/
+// - https://www.reddit.com/r/Compilers/comments/x3d3r6/type_information_in_the_ast/
 
 pub trait ASTSpec
 where
