@@ -17,9 +17,63 @@ pub enum Error {
     InvalidCallable(Type),
 }
 
-type Result<T> = result::Result<T, Error>;
+pub type Result<T> = result::Result<T, Error>;
 
-type SymbolTable = HashMap<String, TypedExpr>;
+struct SymbolInfo {
+    idx: usize,
+    typ: Type,
+}
+
+type StackFrame = HashMap<String, SymbolInfo>;
+
+struct SymbolTable {
+    // TODO: supporting forward references will require supporting empty values
+    // in the globals table
+    globals: HashMap<String, SymbolInfo>,
+    frames: Vec<StackFrame>,
+}
+
+impl SymbolTable {
+    fn new() -> Self {
+        Self { globals: HashMap::new(), frames: Vec::new() }
+    }
+
+    fn def_global(&mut self, name: String, typ: Type) {
+        let idx = self.globals.len();
+        self.globals.insert(name, SymbolInfo { idx, typ });
+    }
+
+    fn push_frame(&mut self) {
+        self.frames.push(HashMap::new());
+    }
+
+    fn get_global(&self, name: &str) -> Option<Resolution> {
+        self.globals.get(name).map(|SymbolInfo { idx, typ }| Resolution {
+            reference: Reference::Global { idx: *idx },
+            typ: typ.clone(),
+        })
+    }
+
+    fn get_frame(&self, name: &str, depth: usize) -> Option<Resolution> {
+        let i = self.frames.len() - depth - 1;
+        self.frames[i].get(name).map(|SymbolInfo { idx, typ }| Resolution {
+            reference: Reference::Stack { frame_depth: depth, frame_idx: *idx },
+            typ: typ.clone(),
+        })
+    }
+
+    fn get(&self, name: &str) -> Option<Resolution> {
+        (0..self.frames.len())
+            .find_map(|depth| self.get_frame(name, depth))
+            .or_else(|| self.get_global(name))
+    }
+
+    fn insert(&mut self, name: String, typ: Type) {
+        let frame = self.frames.last_mut().unwrap();
+        let idx = frame.len();
+        frame.insert(name, SymbolInfo { idx, typ });
+    }
+}
 
 fn analyze_all(
     exprs: Vec<Expr>,
@@ -41,33 +95,31 @@ fn check_all(want: &[Type], got: &[TypedExpr]) -> Result<()> {
     }
 }
 
-pub fn analyze_expr(expr: Expr, ctx: &mut SymbolTable) -> Result<TypedExpr> {
+fn analyze_expr(expr: Expr, ctx: &mut SymbolTable) -> Result<TypedExpr> {
     match expr {
         IntExpr(prim) => Ok(IntExpr(prim)),
         StrExpr(prim) => Ok(StrExpr(prim)),
         IdentExpr(prim) => {
             let name = prim.name;
-            let expr = ctx.get(&name).ok_or(Error::Undefined(name.clone()))?;
-            Ok(expr.clone())
+            let cargo = ctx.get(&name).ok_or(Error::Undefined(name.clone()))?;
+            Ok(IdentExpr(TypedIdent { name, cargo }))
         }
-        CallExpr(call) => match analyze_expr(*call.target, ctx)? {
-            FuncExpr(f) => {
-                let fn_typ = f.cargo.clone();
+        CallExpr(call) => {
+            let target = analyze_expr(*call.target, ctx)?;
+            if let Type::Fn(f) = target.typ() {
+                let target = Box::new(target);
                 let args = analyze_all(call.args, ctx)?;
-                check_all(&fn_typ.params, &args)?;
-                Ok(CallExpr(TypedCall {
-                    target: Box::new(FuncExpr(f)),
-                    args,
-                    cargo: *fn_typ.ret,
-                }))
+                check_all(&f.params, &args)?;
+                Ok(CallExpr(TypedCall { target, args, cargo: *f.ret }))
+            } else {
+                Err(Error::InvalidCallable(target.typ()))
             }
-            typ => Err(Error::InvalidCallable(typ.typ().clone())),
-        },
+        }
         FuncExpr(_) => todo!(),
     }
 }
 
-pub fn analyze_stmt(stmt: Stmt, ctx: &mut SymbolTable) -> Result<()> {
+fn analyze_stmt(stmt: Stmt, ctx: &mut SymbolTable) -> Result<()> {
     match stmt {
         Stmt::ExprStmt(expr) => analyze_expr(expr, ctx).map(|_| ()),
         Stmt::LetStmt(_expr) => todo!(),
@@ -75,13 +127,22 @@ pub fn analyze_stmt(stmt: Stmt, ctx: &mut SymbolTable) -> Result<()> {
     }
 }
 
-pub fn analyze_block(block: Block, ctx: &mut SymbolTable) -> Result<()> {
+fn analyze_block(block: Block, ctx: &mut SymbolTable) -> Result<()> {
     let Block(stmts) = block;
     stmts.into_iter().try_for_each(|stmt| analyze_stmt(stmt, ctx))
 }
 
-pub fn analyze_program(_prog: Program) -> Result<TypedProgram> {
+fn analyze_def(def: Def, ctx: &mut SymbolTable) -> Result<TypedDef> {
     todo!()
+}
+
+pub fn analyze_program(prog: Program) -> Result<TypedProgram> {
+    let mut ctx = SymbolTable::new();
+    let mut defs = Vec::new();
+    for def in prog.defs {
+        defs.push(analyze_def(def, &mut ctx)?);
+    }
+    Ok(TypedProgram { defs })
 }
 
 #[cfg(test)]
@@ -118,28 +179,12 @@ mod test {
     #[test]
     fn test_calls() {
         let mut ctx = SymbolTable::new();
+        ctx.push_frame();
         ctx.insert(
             String::from("println"),
-            TypedExpr::FuncExpr(TypedFunc {
-                name: String::from("println"),
-                params: vec![
-                    Param {
-                        name: String::from("left"),
-                        typ: TypeSpec::Simple(String::from("int")),
-                        cargo: Type::Int,
-                    },
-                    Param {
-                        name: String::from("right"),
-                        typ: TypeSpec::Simple(String::from("str")),
-                        cargo: Type::Int,
-                    },
-                ],
-                body: Block(vec![]),
-                ret: TypeSpec::Void,
-                cargo: FnType {
-                    params: vec![Type::Int, Type::Str],
-                    ret: Box::new(Type::Void),
-                },
+            Type::Fn(FnType {
+                params: vec![Type::Int, Type::Str],
+                ret: Box::new(Type::Void),
             }),
         );
         let inputs: &[&[u8]] = &[
@@ -163,21 +208,9 @@ mod test {
     #[test]
     fn test_idents() {
         let mut ctx = SymbolTable::new();
-        ctx.insert(String::from("foo"), TypedExpr::IntExpr(Literal::new(27)));
-        ctx.insert(
-            String::from("bar"),
-            TypedExpr::CallExpr(TypedCall {
-                target: Box::new(TypedExpr::FuncExpr(TypedFunc {
-                    name: String::from("test"),
-                    params: vec![],
-                    body: Block(vec![]),
-                    ret: TypeSpec::Simple(String::from("str")),
-                    cargo: FnType { params: vec![], ret: Box::new(Type::Void) },
-                })),
-                args: vec![],
-                cargo: Type::Str,
-            }),
-        );
+        ctx.push_frame();
+        ctx.insert(String::from("foo"), Type::Int);
+        ctx.insert(String::from("bar"), Type::Str);
         let inputs: &[&[u8]] = &[b"foo", b"bar", b"baz"];
         let expected = vec![
             Ok(Type::Int),

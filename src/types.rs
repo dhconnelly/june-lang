@@ -30,10 +30,15 @@ pub trait Typed {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
+pub enum Reference {
+    Global { idx: usize },
+    Stack { frame_depth: usize, frame_idx: usize },
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Resolution {
     pub typ: Type,
-    pub frame_depth: usize,
-    pub frame_offset: usize,
+    pub reference: Reference,
 }
 
 #[derive(Debug, Error, PartialEq)]
