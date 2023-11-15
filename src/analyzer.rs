@@ -126,6 +126,18 @@ fn analyze_func(f: Func, ctx: &mut SymbolTable) -> Result<TypedFunc> {
     Ok(func)
 }
 
+fn analyze_call(call: Call, ctx: &mut SymbolTable) -> Result<TypedCall> {
+    let target = analyze_expr(*call.target, ctx)?;
+    if let Type::Fn(f) = target.typ() {
+        let target = Box::new(target);
+        let args = analyze_all(call.args, ctx)?;
+        check_all(&f.params, &args)?;
+        Ok(TypedCall { target, args, cargo: *f.ret })
+    } else {
+        Err(Error::InvalidCallable(target.typ()))
+    }
+}
+
 fn analyze_expr(expr: Expr, ctx: &mut SymbolTable) -> Result<TypedExpr> {
     match expr {
         IntExpr(prim) => Ok(IntExpr(prim)),
@@ -135,17 +147,7 @@ fn analyze_expr(expr: Expr, ctx: &mut SymbolTable) -> Result<TypedExpr> {
             let cargo = ctx.get(&name).ok_or(Error::Undefined(name.clone()))?;
             Ok(IdentExpr(TypedIdent { name, cargo }))
         }
-        CallExpr(call) => {
-            let target = analyze_expr(*call.target, ctx)?;
-            if let Type::Fn(f) = target.typ() {
-                let target = Box::new(target);
-                let args = analyze_all(call.args, ctx)?;
-                check_all(&f.params, &args)?;
-                Ok(CallExpr(TypedCall { target, args, cargo: *f.ret }))
-            } else {
-                Err(Error::InvalidCallable(target.typ()))
-            }
-        }
+        CallExpr(call) => Ok(CallExpr(analyze_call(call, ctx)?)),
         FuncExpr(_) => todo!(),
     }
 }
