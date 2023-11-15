@@ -18,12 +18,14 @@ add features:
 
 - [ ] recursion and mutual recursion
 - [ ] forward references for globals
+- [ ] return types
+- [ ] assignment
 - [ ] conditionals
+- [ ] loops
 - [ ] structs
 - [ ] vecs
 - [ ] maps
 - [ ] sets
-- [ ] closures
 - [ ] file i/o
 
 refactoring:
@@ -53,14 +55,13 @@ what I think is necessary to solve Advent of Code puzzles.
 
 ## Features
 
-- builds [wasi](https://wasi.dev) binaries that can be executed by [wasmtime](https://wasmtime.dev)
+- builds binaries that can be executed by [wasmtime](https://wasmtime.dev)
 - static typing: programs are checked during compilation
 - basic types: int, float, bool, string
-- the usual arithmetic and logical operators
+- the usual arithmetic and logical operators, loops, conditionals
 - recursion, mutual recursion, forward references for globals
 - user-defined structs
 - common collections: maps, sets, vecs
-- first-class functions with closure
 - garbage collection
 - file i/o
 
@@ -68,6 +69,7 @@ what I think is necessary to solve Advent of Code puzzles.
 
 - subtyping
 - generics for user-defined types
+- concurrency
 
 ## Example
 
