@@ -4,14 +4,15 @@ a small statically-typed language that runs on [wasm](https://webassembly.org/)
 
 ## TODO
 
-end-to-end for basic programs:
+end-to-end for basic programs (i.e. functions, local variables, strings, basic
+built-ins for string processing, garbage collection):
 
 - [x] scanner
 - [x] parser
 - [x] analyzer
 - [ ] compiler
 - [ ] wasm serializer
-- [ ] make it work
+- [ ] end-to-end testing
 - [ ] garbage collection
 
 add features:
@@ -67,6 +68,7 @@ what I think is necessary to solve Advent of Code puzzles.
 
 ## Non-features
 
+- first-class functions
 - subtyping
 - generics for user-defined types
 - concurrency
