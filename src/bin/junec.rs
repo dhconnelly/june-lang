@@ -4,7 +4,7 @@ fn main() {
         eprintln!("usage: junec file");
         std::process::exit(1);
     };
-    if let Err(err) = june_lang::compiler::compile_file(&args[1]) {
+    if let Err(err) = june_lang::driver::compile_file(&args[1]) {
         eprintln!("junec: {}", err);
         std::process::exit(1);
     }
