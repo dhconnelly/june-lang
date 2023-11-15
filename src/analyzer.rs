@@ -1,8 +1,9 @@
 // TODO: write failure test cases
 use crate::ast::{Expr::*, *};
+use crate::builtins;
+use crate::symbol_table::*;
 use crate::types;
 use crate::types::*;
-use std::collections::HashMap;
 use std::result;
 use thiserror::Error;
 
@@ -21,67 +22,6 @@ pub enum Error {
 }
 
 pub type Result<T> = result::Result<T, Error>;
-
-#[derive(Debug)]
-struct SymbolInfo {
-    idx: usize,
-    typ: Type,
-}
-
-#[derive(Debug)]
-struct SymbolTable {
-    // TODO: supporting forward references will require supporting empty values
-    // in the globals table
-    globals: HashMap<String, SymbolInfo>,
-    frames: Vec<HashMap<String, SymbolInfo>>,
-}
-
-impl SymbolTable {
-    fn new() -> Self {
-        Self { globals: HashMap::new(), frames: Vec::new() }
-    }
-
-    fn def_global<S: Into<String>>(&mut self, name: S, typ: Type) {
-        let idx = self.globals.len();
-        let name = name.into();
-        self.globals.insert(name, SymbolInfo { idx, typ });
-    }
-
-    fn push_frame(&mut self) {
-        self.frames.push(HashMap::new());
-    }
-
-    fn pop_frame(&mut self) {
-        self.frames.pop().unwrap();
-    }
-
-    fn get_global(&self, name: &str) -> Option<Resolution> {
-        self.globals.get(name).map(|SymbolInfo { idx, typ }| Resolution {
-            reference: Reference::Global { idx: *idx },
-            typ: typ.clone(),
-        })
-    }
-
-    fn get_frame(&self, name: &str, depth: usize) -> Option<Resolution> {
-        let i = self.frames.len() - depth - 1;
-        self.frames[i].get(name).map(|SymbolInfo { idx, typ }| Resolution {
-            reference: Reference::Stack { frame_depth: depth, frame_idx: *idx },
-            typ: typ.clone(),
-        })
-    }
-
-    fn get(&self, name: &str) -> Option<Resolution> {
-        (0..self.frames.len())
-            .find_map(|depth| self.get_frame(name, depth))
-            .or_else(|| self.get_global(name))
-    }
-
-    fn insert<S: Into<String>>(&mut self, name: S, typ: Type) {
-        let frame = self.frames.last_mut().unwrap();
-        let idx = frame.len();
-        frame.insert(name.into(), SymbolInfo { idx, typ });
-    }
-}
 
 fn analyze_all(
     exprs: Vec<Expr>,
@@ -152,7 +92,7 @@ fn analyze_expr(expr: Expr, ctx: &mut SymbolTable) -> Result<TypedExpr> {
     }
 }
 
-fn resolve_type(typ: &TypeSpec, ctx: &SymbolTable) -> Result<Type> {
+fn resolve_type(typ: &TypeSpec, _ctx: &SymbolTable) -> Result<Type> {
     // TODO: handle more complex types
     match typ {
         TypeSpec::Void => Ok(Type::Void),
@@ -218,8 +158,9 @@ fn analyze_program(
 }
 
 pub fn analyze(prog: Program) -> Result<TypedProgram> {
-    // TODO: define globals
-    analyze_program(prog, &mut SymbolTable::new())
+    let mut ctx = SymbolTable::new();
+    builtins::install(&mut ctx);
+    analyze_program(prog, &mut ctx)
 }
 
 #[cfg(test)]

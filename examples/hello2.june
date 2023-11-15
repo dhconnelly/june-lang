@@ -1,6 +1,7 @@
 fn greet(name: str, age: int) {
-    println("hello!", name, "aged", age);
-    println("how are you today?");
+    let age_str: str = itoa(age);
+    println(concat("hello, ", name));
+    println(concat("you are ", age_str));
 }
 
 fn main() {
