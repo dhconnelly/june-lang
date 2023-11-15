@@ -45,7 +45,7 @@ struct Analyzer {
 
 impl Default for Analyzer {
     fn default() -> Analyzer {
-        let mut ctx = SymbolTable::new();
+        let mut ctx = SymbolTable::default();
         builtins::install(&mut ctx);
         Analyzer::with_context(ctx)
     }
@@ -248,7 +248,7 @@ mod test {
                 }),
             ],
         };
-        let mut ctx = SymbolTable::new();
+        let mut ctx = SymbolTable::default();
         ctx.def_global(
             "println",
             Type::Fn(FnType {
@@ -262,7 +262,7 @@ mod test {
 
     #[test]
     fn test_func() {
-        let mut ctx = SymbolTable::new();
+        let mut ctx = SymbolTable::default();
         ctx.def_global(
             "itoa",
             Type::Fn(FnType {
@@ -541,7 +541,7 @@ mod test {
 
     #[test]
     fn test_call() {
-        let mut ctx = SymbolTable::new();
+        let mut ctx = SymbolTable::default();
         ctx.push_frame();
         ctx.def_local(
             String::from("println"),
@@ -566,7 +566,7 @@ mod test {
 
     #[test]
     fn test_ident() {
-        let mut ctx = SymbolTable::new();
+        let mut ctx = SymbolTable::default();
         ctx.push_frame();
         ctx.def_local(String::from("foo"), Type::Int);
         ctx.def_local(String::from("bar"), Type::Str);
@@ -584,7 +584,7 @@ mod test {
     fn test_literal() {
         let inputs: &[&[u8]] = &[b"27", b"\"hello, world\""];
         let expected = vec![Ok(Type::Int), Ok(Type::Str)];
-        let actual = analyze_exprs(inputs, SymbolTable::new());
+        let actual = analyze_exprs(inputs, SymbolTable::default());
         assert_eq!(expected, actual);
     }
 }

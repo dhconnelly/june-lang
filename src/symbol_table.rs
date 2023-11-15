@@ -7,7 +7,7 @@ struct SymbolInfo {
     typ: Type,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct SymbolTable {
     // TODO: supporting forward references will require supporting empty values
     // in the globals table
@@ -16,14 +16,17 @@ pub struct SymbolTable {
 }
 
 impl SymbolTable {
-    pub fn new() -> Self {
-        Self { globals: HashMap::new(), frames: Vec::new() }
-    }
-
     pub fn def_global<S: Into<String>>(&mut self, name: S, typ: Type) {
         let idx = self.globals.len();
         let name = name.into();
         self.globals.insert(name, SymbolInfo { idx, typ });
+    }
+
+    fn get_global(&self, name: &str) -> Option<Resolution> {
+        self.globals.get(name).map(|SymbolInfo { idx, typ }| Resolution {
+            reference: Reference::Global { idx: *idx },
+            typ: typ.clone(),
+        })
     }
 
     pub fn push_frame(&mut self) {
@@ -34,11 +37,10 @@ impl SymbolTable {
         self.frames.pop().unwrap();
     }
 
-    fn get_global(&self, name: &str) -> Option<Resolution> {
-        self.globals.get(name).map(|SymbolInfo { idx, typ }| Resolution {
-            reference: Reference::Global { idx: *idx },
-            typ: typ.clone(),
-        })
+    pub fn def_local<S: Into<String>>(&mut self, name: S, typ: Type) {
+        let frame = self.frames.last_mut().unwrap();
+        let idx = frame.len();
+        frame.insert(name.into(), SymbolInfo { idx, typ });
     }
 
     fn get_frame(&self, name: &str, depth: usize) -> Option<Resolution> {
@@ -53,17 +55,5 @@ impl SymbolTable {
         (0..self.frames.len())
             .find_map(|depth| self.get_frame(name, depth))
             .or_else(|| self.get_global(name))
-    }
-
-    pub fn def_local<S: Into<String>>(&mut self, name: S, typ: Type) {
-        let frame = self.frames.last_mut().unwrap();
-        let idx = frame.len();
-        frame.insert(name.into(), SymbolInfo { idx, typ });
-    }
-}
-
-impl Default for SymbolTable {
-    fn default() -> Self {
-        Self::new()
     }
 }
