@@ -2,6 +2,48 @@
 
 a small statically-typed language that runs on [wasm](https://webassembly.org/)
 
+## TODO
+
+end-to-end for basic programs:
+
+- [x] scanner
+- [x] parser
+- [x] analyzer
+- [ ] compiler
+- [ ] wasm serializer
+- [ ] make it work
+- [ ] garbage collection
+
+add features:
+
+- [ ] recursion and mutual recursion
+- [ ] forward references for globals
+- [ ] conditionals
+- [ ] structs
+- [ ] vecs
+- [ ] maps
+- [ ] sets
+- [ ] closures
+- [ ] file i/o
+
+refactoring:
+
+- [ ] avoid copies in ast
+- [ ] static func type in ast
+- [ ] just one From<io::Error> in scanner
+- [ ] add back (line, col) tracking
+- [ ] nice error reporting
+- [ ] improve the algebra
+- [ ] simplify the awful functions
+- [ ] narrow public interface
+- [ ] nicer main.rs w/structopt
+- [ ] read and apply https://thume.ca/2019/04/18/writing-a-compiler-in-rust/
+
+productionization:
+
+- [ ] skim relevant parts of engineering a compiler
+- [ ] skim relevant parts of types and programming languages
+
 ## Features
 
 - [ ] builds [wasi](https://wasi.dev) binaries that can be executed by [wasmtime](https://wasmtime.dev)
@@ -102,7 +144,7 @@ helped me the most:
 -   [My First Language Frontend with LLVM Tutorial](https://llvm.org/docs/tutorial/MyFirstLanguageFrontend/index.html)
 
 Additionally, I've read most of SICP and poked around in the Engineering
-Compilers and Modern Compiler Implementation in ML textbook.
+a Compiler and Modern Compiler Implementation in ML textbook.
 
 I also briefly worked on the GCL team at Google. (GCL is a bizarre internal
 language used to generate protocol buffers in a whole bunch of different
