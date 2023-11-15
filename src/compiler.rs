@@ -30,7 +30,7 @@ pub fn compile(p: impl AsRef<Path>) -> Result<()> {
     let mut p = parser::parse(s);
     let ast = p.program()?;
     println!("{:#?}", ast);
-    let typed_ast = analyzer::analyze_program(ast);
+    let typed_ast = analyzer::analyze(ast);
     println!("{:#?}", typed_ast);
     Ok(())
 }

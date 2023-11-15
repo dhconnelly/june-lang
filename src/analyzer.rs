@@ -195,16 +195,29 @@ fn analyze_block(block: Block, ctx: &mut SymbolTable) -> Result<TypedBlock> {
 }
 
 fn analyze_def(def: Def, ctx: &mut SymbolTable) -> Result<TypedDef> {
-    todo!()
+    match def {
+        Def::FnDef(f) => {
+            let func = analyze_func(f, ctx)?;
+            ctx.def_global(func.name.clone(), Type::Fn(func.cargo.clone()));
+            Ok(Def::FnDef(func))
+        }
+    }
 }
 
-pub fn analyze_program(prog: Program) -> Result<TypedProgram> {
-    let mut ctx = SymbolTable::new();
+fn analyze_program(
+    prog: Program,
+    ctx: &mut SymbolTable,
+) -> Result<TypedProgram> {
     let mut defs = Vec::new();
     for def in prog.defs {
-        defs.push(analyze_def(def, &mut ctx)?);
+        defs.push(analyze_def(def, ctx)?);
     }
     Ok(TypedProgram { defs })
+}
+
+pub fn analyze(prog: Program) -> Result<TypedProgram> {
+    // TODO: define globals
+    analyze_program(prog, &mut SymbolTable::new())
 }
 
 #[cfg(test)]
@@ -236,6 +249,90 @@ mod test {
             v.push(analyze(node).map(|nd| nd.typ().clone()))
         }
         v
+    }
+
+    #[test]
+    fn test_hello() {
+        let input = b"
+            fn greet(name: str) {
+                println(name);
+            }
+
+            fn main() {
+                greet(\"the pope\");
+            }
+        ";
+        let program = parse(input).program().unwrap();
+        let expected = Program {
+            defs: vec![
+                Def::FnDef(Func {
+                    name: String::from("greet"),
+                    params: vec![TypedParam {
+                        name: String::from("name"),
+                        typ: TypeSpec::simple("str"),
+                        cargo: Type::Str,
+                    }],
+                    ret: TypeSpec::Void,
+                    body: Block(vec![Stmt::ExprStmt(CallExpr(Call {
+                        target: Box::new(IdentExpr(Ident {
+                            name: String::from("println"),
+                            cargo: Resolution {
+                                reference: Reference::Global { idx: 0 },
+                                typ: Type::Fn(FnType {
+                                    params: vec![Type::Str],
+                                    ret: Box::new(Type::Void),
+                                }),
+                            },
+                        })),
+                        args: vec![IdentExpr(Ident {
+                            name: String::from("name"),
+                            cargo: Resolution {
+                                reference: Reference::Stack {
+                                    frame_depth: 1,
+                                    frame_idx: 0,
+                                },
+                                typ: Type::Str,
+                            },
+                        })],
+                        cargo: Type::Void,
+                    }))]),
+                    cargo: FnType {
+                        params: vec![Type::Str],
+                        ret: Box::new(Type::Void),
+                    },
+                }),
+                Def::FnDef(Func {
+                    name: String::from("main"),
+                    params: vec![],
+                    ret: TypeSpec::Void,
+                    body: Block(vec![Stmt::ExprStmt(CallExpr(Call {
+                        target: Box::new(IdentExpr(Ident {
+                            name: String::from("greet"),
+                            cargo: Resolution {
+                                reference: Reference::Global { idx: 1 },
+                                typ: Type::Fn(FnType {
+                                    params: vec![Type::Str],
+                                    ret: Box::new(Type::Void),
+                                }),
+                            },
+                        })),
+                        args: vec![StrExpr(Literal::new("the pope"))],
+                        cargo: Type::Void,
+                    }))]),
+                    cargo: FnType { params: vec![], ret: Box::new(Type::Void) },
+                }),
+            ],
+        };
+        let mut ctx = SymbolTable::new();
+        ctx.def_global(
+            "println",
+            Type::Fn(FnType {
+                params: vec![Type::Str],
+                ret: Box::new(Type::Void),
+            }),
+        );
+        let actual = analyze_program(program, &mut ctx).unwrap();
+        assert_eq!(expected, actual);
     }
 
     #[test]

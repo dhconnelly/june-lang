@@ -8,6 +8,7 @@ a small statically-typed language that runs on [wasm](https://webassembly.org/)
 - [ ] static typing: programs are checked during compilation
 - [ ] basic types: int, float, bool, string
 - [ ] the usual arithmetic and logical operators
+- [ ] recursion, mutual recursion, forward references for globals
 - [ ] user-defined structs
 - [ ] common collections: maps, sets, vecs
 - [ ] first-class functions with closure
