@@ -17,7 +17,7 @@ pub enum Error {
     Invalid { want: String, got: Token },
 }
 
-pub type Result<T> = result::Result<T, Error>;
+type Result<T> = result::Result<T, Error>;
 
 pub struct Parser<R: io::BufRead> {
     scanner: iter::Peekable<scanner::Scanner<R>>,
@@ -28,20 +28,12 @@ impl<R: io::BufRead> Parser<R> {
         self.scanner.peek().is_none()
     }
 
-    fn peek_is(&mut self, want: Token) -> bool {
-        matches!(self.scanner.peek(), Some(Ok(got)) if got == &want)
-    }
-
-    fn advance(&mut self) -> Result<Token> {
-        Ok(self.scanner.next().ok_or(Error::UnexpectedEOF)??)
-    }
-
     fn eat<T, F: FnMut(&Token) -> Option<T>>(
         &mut self,
         mut f: F,
         want: String,
     ) -> Result<T> {
-        let got = self.advance()?;
+        let got = self.scanner.next().ok_or(Error::UnexpectedEOF)??;
         match f(&got) {
             Some(t) => Ok(t),
             None => Err(Error::Invalid { want, got }),
@@ -67,17 +59,16 @@ impl<R: io::BufRead> Parser<R> {
         mut f: F,
     ) -> Result<Vec<T>> {
         let mut list = Vec::new();
-        if !self.peek_is(Rparen) {
-            list.push(f(self)?);
-        }
-        while !self.peek_is(Rparen) {
-            self.eat_tok(Comma)?;
+        while !matches!(self.scanner.peek(), Some(Ok(Rparen))) {
+            if list.len() > 0 {
+                self.eat_tok(Comma)?;
+            }
             list.push(f(self)?);
         }
         Ok(list)
     }
 
-    pub fn primary(&mut self) -> Result<Expr> {
+    fn primary(&mut self) -> Result<Expr> {
         let prim = match self.scanner.next().ok_or(Error::UnexpectedEOF)?? {
             Str(value) => Ok(StrExpr(Literal::new(value))),
             Int(value) => Ok(IntExpr(Literal::new(value))),
@@ -99,18 +90,18 @@ impl<R: io::BufRead> Parser<R> {
         }
     }
 
-    pub fn type_spec(&mut self) -> Result<TypeSpec> {
+    fn type_spec(&mut self) -> Result<TypeSpec> {
         // TODO: parse more complicated types
         Ok(TypeSpec::Simple(self.eat_ident()?))
     }
 
-    pub fn expr_stmt(&mut self) -> Result<Stmt> {
+    fn expr_stmt(&mut self) -> Result<Stmt> {
         let expr = self.expr()?;
         self.eat_tok(Semi)?;
         Ok(ExprStmt(expr))
     }
 
-    pub fn let_stmt(&mut self) -> Result<Stmt> {
+    fn let_stmt(&mut self) -> Result<Stmt> {
         self.eat_tok(Let)?;
         let name = self.eat_ident()?;
         self.eat_tok(Colon)?;
@@ -132,14 +123,14 @@ impl<R: io::BufRead> Parser<R> {
     pub fn block(&mut self) -> Result<Block> {
         self.eat_tok(Lbrace)?;
         let mut stmts = Vec::new();
-        while !self.peek_is(Rbrace) {
+        while !matches!(self.scanner.peek(), Some(Ok(Rbrace))) {
             stmts.push(self.stmt()?);
         }
         self.eat_tok(Rbrace)?;
         Ok(Block(stmts))
     }
 
-    pub fn param(&mut self) -> Result<Param> {
+    fn param(&mut self) -> Result<Param> {
         let name = self.eat_ident()?;
         self.eat_tok(Colon)?;
         let typ = self.type_spec()?;
@@ -187,18 +178,6 @@ mod test {
         super::parse(s)
     }
 
-    fn parse_all<T, F: FnMut(&mut Parser<&[u8]>) -> Result<T>>(
-        input: &[u8],
-        mut f: F,
-    ) -> Vec<T> {
-        let mut p = parse(input);
-        let mut v = Vec::new();
-        while !p.eof() {
-            v.push(f(&mut p).unwrap());
-        }
-        v
-    }
-
     #[test]
     fn test_empty() {
         let input: &[u8] = b"
@@ -212,12 +191,16 @@ mod test {
     fn test_primary() {
         let input = b"foo bar 27 \"hello, world\"";
         let expected = vec![
-            Expr::IdentExpr(Ident::untyped("foo")),
-            Expr::IdentExpr(Ident::untyped("bar")),
-            Expr::IntExpr(Literal::new(27)),
-            Expr::StrExpr(Literal::new("hello, world")),
+            IdentExpr(Ident::untyped("foo")),
+            IdentExpr(Ident::untyped("bar")),
+            IntExpr(Literal::new(27)),
+            StrExpr(Literal::new("hello, world")),
         ];
-        let actual = parse_all(input, |p| p.primary());
+        let mut p = parse(input);
+        let mut actual = Vec::new();
+        while !p.eof() {
+            actual.push(p.primary().unwrap());
+        }
         assert_eq!(expected, actual);
     }
 
@@ -332,11 +315,11 @@ mod test {
                             TypeSpec::Simple(String::from("int")),
                         ),
                     ],
-                    Block(vec![Stmt::ExprStmt(Expr::CallExpr(Call::untyped(
-                        Expr::IdentExpr(Ident::untyped("println")),
+                    Block(vec![ExprStmt(Expr::CallExpr(Call::untyped(
+                        IdentExpr(Ident::untyped("println")),
                         vec![
-                            Expr::IdentExpr(Ident::untyped("s")),
-                            Expr::IdentExpr(Ident::untyped("t")),
+                            IdentExpr(Ident::untyped("s")),
+                            IdentExpr(Ident::untyped("t")),
                         ],
                     )))]),
                     TypeSpec::Void,
@@ -344,9 +327,9 @@ mod test {
                 Def::FnDef(Func::untyped(
                     "main",
                     vec![],
-                    Block(vec![Stmt::ExprStmt(Expr::CallExpr(Call::untyped(
-                        Expr::IdentExpr(Ident::untyped("foo")),
-                        vec![Expr::StrExpr(Literal::new("hello, world"))],
+                    Block(vec![ExprStmt(Expr::CallExpr(Call::untyped(
+                        IdentExpr(Ident::untyped("foo")),
+                        vec![StrExpr(Literal::new("hello, world"))],
                     )))]),
                     TypeSpec::Void,
                 )),

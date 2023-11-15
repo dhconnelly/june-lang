@@ -1,6 +1,3 @@
-use std::result;
-use thiserror::Error;
-
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct FnType {
     pub params: Vec<Type>,
@@ -13,16 +10,6 @@ pub enum Type {
     Int,
     Str,
     Fn(FnType),
-}
-
-impl Type {
-    pub fn check(&self, other: &Type) -> Result<()> {
-        if self == other {
-            Ok(())
-        } else {
-            Err(Error { want: format!("{:?}", self), got: other.clone() })
-        }
-    }
 }
 
 pub trait Typed {
@@ -41,12 +28,3 @@ pub struct Resolution {
     pub typ: Type,
     pub reference: Reference,
 }
-
-#[derive(Debug, Error, PartialEq)]
-#[error("type mismatch: want {want}, got {got:?}")]
-pub struct Error {
-    pub want: String,
-    pub got: Type,
-}
-
-pub type Result<T> = result::Result<T, Error>;

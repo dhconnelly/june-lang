@@ -1,13 +1,13 @@
 use crate::types::*;
 use std::collections::HashMap;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct SymbolInfo {
     idx: usize,
     typ: Type,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SymbolTable {
     // TODO: supporting forward references will require supporting empty values
     // in the globals table

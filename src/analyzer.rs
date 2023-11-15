@@ -1,8 +1,7 @@
 // TODO: write failure test cases
-use crate::ast::{Expr::*, *};
+use crate::ast::{Def::*, Expr::*, Stmt::*, *};
 use crate::builtins;
 use crate::symbol_table::*;
-use crate::types;
 use crate::types::*;
 use std::result;
 use thiserror::Error;
@@ -13,66 +12,61 @@ pub enum Error {
     Undefined(String),
     #[error("wrong number of arguments: want {want}, got {got}")]
     Arity { want: usize, got: usize },
-    #[error("{0}")]
-    TypeMismatch(#[from] types::Error),
+    #[error("type mismatch: want {want:?}, got {got:?}")]
+    TypeMismatch { want: Type, got: Type },
     #[error("not callable: {0:?}")]
     InvalidCallable(Type),
     #[error("unknown type: {0}")]
     UnknownType(String),
 }
 
-pub type Result<T> = result::Result<T, Error>;
+type Result<T> = result::Result<T, Error>;
 
-fn analyze_all(
-    exprs: Vec<Expr>,
-    ctx: &mut SymbolTable,
-) -> Result<Vec<TypedExpr>> {
-    let mut texprs = Vec::new();
-    for expr in exprs {
-        texprs.push(analyze_expr(expr, ctx)?);
+fn check((want, got): (&Type, &TypedExpr)) -> Result<()> {
+    let got = got.typ();
+    if want != &got {
+        Err(Error::TypeMismatch { want: want.clone(), got })
+    } else {
+        Ok(())
     }
-    Ok(texprs)
 }
 
 fn check_all(want: &[Type], got: &[TypedExpr]) -> Result<()> {
     if want.len() != got.len() {
         Err(Error::Arity { want: want.len(), got: got.len() })
     } else {
-        let mut pairs = want.iter().zip(got.iter());
-        Ok(pairs.try_for_each(|(want, got)| want.check(&got.typ()))?)
+        want.iter().zip(got).try_for_each(check)
     }
 }
 
 fn analyze_func(f: Func, ctx: &mut SymbolTable) -> Result<TypedFunc> {
     // TODO: look for return statements when we handle return types
     ctx.push_frame();
-    let mut params = Vec::new();
+    let (mut param_types, mut params) = (Vec::new(), Vec::new());
     for param in f.params {
         let typ = resolve_type(&param.typ, ctx)?;
-        params.push(TypedParam {
-            name: param.name.clone(),
-            typ: param.typ,
-            cargo: typ.clone(),
-        });
-        ctx.insert(param.name, typ);
+        ctx.insert(param.name.clone(), typ.clone());
+        param_types.push(typ.clone());
+        params.push(Param { name: param.name, typ: param.typ, cargo: typ });
     }
     let body = analyze_block(f.body, ctx)?;
-    let cargo = FnType {
-        params: params.iter().map(|param| param.cargo.clone()).collect(),
-        ret: Box::new(resolve_type(&f.ret, ctx)?),
-    };
+    let ret = Box::new(resolve_type(&f.ret, ctx)?);
+    let cargo = FnType { params: param_types, ret };
     let func = TypedFunc { name: f.name, params, body, ret: f.ret, cargo };
     ctx.pop_frame();
     Ok(func)
 }
 
 fn analyze_call(call: Call, ctx: &mut SymbolTable) -> Result<TypedCall> {
-    let target = analyze_expr(*call.target, ctx)?;
+    let target = Box::new(analyze_expr(*call.target, ctx)?);
     if let Type::Fn(f) = target.typ() {
-        let target = Box::new(target);
-        let args = analyze_all(call.args, ctx)?;
+        let args = call
+            .args
+            .into_iter()
+            .map(|e| analyze_expr(e, ctx))
+            .collect::<Result<Vec<TypedExpr>>>()?;
         check_all(&f.params, &args)?;
-        Ok(TypedCall { target, args, cargo: *f.ret })
+        Ok(Call { target, args, cargo: *f.ret })
     } else {
         Err(Error::InvalidCallable(target.typ()))
     }
@@ -80,15 +74,14 @@ fn analyze_call(call: Call, ctx: &mut SymbolTable) -> Result<TypedCall> {
 
 fn analyze_expr(expr: Expr, ctx: &mut SymbolTable) -> Result<TypedExpr> {
     match expr {
+        CallExpr(call) => Ok(CallExpr(analyze_call(call, ctx)?)),
         IntExpr(prim) => Ok(IntExpr(prim)),
         StrExpr(prim) => Ok(StrExpr(prim)),
         IdentExpr(prim) => {
             let name = prim.name;
             let cargo = ctx.get(&name).ok_or(Error::Undefined(name.clone()))?;
-            Ok(IdentExpr(TypedIdent { name, cargo }))
+            Ok(IdentExpr(Ident { name, cargo }))
         }
-        CallExpr(call) => Ok(CallExpr(analyze_call(call, ctx)?)),
-        FuncExpr(_) => todo!(),
     }
 }
 
@@ -103,58 +96,53 @@ fn resolve_type(typ: &TypeSpec, _ctx: &SymbolTable) -> Result<Type> {
 }
 
 fn analyze_let(stmt: Binding, ctx: &mut SymbolTable) -> Result<TypedStmt> {
-    let name = stmt.name;
     let typ = resolve_type(&stmt.typ, ctx)?;
     let expr = analyze_expr(stmt.expr, ctx)?;
-    typ.check(&expr.typ())?;
-    ctx.insert(name.clone(), typ.clone());
-    Ok(TypedStmt::LetStmt(TypedBinding {
-        name,
-        typ: stmt.typ,
-        expr,
-        cargo: typ,
-    }))
+    check((&typ, &expr))?;
+    ctx.insert(stmt.name.clone(), typ.clone());
+    Ok(LetStmt(Binding::new(stmt.name, stmt.typ, expr, typ)))
 }
 
 fn analyze_stmt(stmt: Stmt, ctx: &mut SymbolTable) -> Result<TypedStmt> {
     match stmt {
-        Stmt::ExprStmt(expr) => Ok(Stmt::ExprStmt(analyze_expr(expr, ctx)?)),
-        Stmt::LetStmt(stmt) => analyze_let(stmt, ctx),
-        Stmt::BlockStmt(block) => {
-            Ok(Stmt::BlockStmt(analyze_block(block, ctx)?))
-        }
+        ExprStmt(expr) => Ok(ExprStmt(analyze_expr(expr, ctx)?)),
+        LetStmt(stmt) => analyze_let(stmt, ctx),
+        BlockStmt(block) => Ok(BlockStmt(analyze_block(block, ctx)?)),
     }
 }
 
-fn analyze_block(block: Block, ctx: &mut SymbolTable) -> Result<TypedBlock> {
+fn analyze_block(
+    Block(stmts): Block,
+    ctx: &mut SymbolTable,
+) -> Result<TypedBlock> {
     ctx.push_frame();
-    let mut stmts = Vec::new();
-    for stmt in block.0 {
-        stmts.push(analyze_stmt(stmt, ctx)?);
-    }
+    let stmts = stmts
+        .into_iter()
+        .map(|stmt| analyze_stmt(stmt, ctx))
+        .collect::<Result<_>>()?;
     ctx.pop_frame();
-    Ok(Block::<TypedAST>(stmts))
+    Ok(Block(stmts))
 }
 
 fn analyze_def(def: Def, ctx: &mut SymbolTable) -> Result<TypedDef> {
     match def {
-        Def::FnDef(f) => {
+        FnDef(f) => {
             let func = analyze_func(f, ctx)?;
             ctx.def_global(func.name.clone(), Type::Fn(func.cargo.clone()));
-            Ok(Def::FnDef(func))
+            Ok(FnDef(func))
         }
     }
 }
 
 fn analyze_program(
-    prog: Program,
+    Program { defs }: Program,
     ctx: &mut SymbolTable,
 ) -> Result<TypedProgram> {
-    let mut defs = Vec::new();
-    for def in prog.defs {
-        defs.push(analyze_def(def, ctx)?);
-    }
-    Ok(TypedProgram { defs })
+    let defs = defs
+        .into_iter()
+        .map(|def| analyze_def(def, ctx))
+        .collect::<Result<_>>()?;
+    Ok(Program { defs })
 }
 
 pub fn analyze(prog: Program) -> Result<TypedProgram> {
@@ -174,26 +162,6 @@ mod test {
         parser::parse(s)
     }
 
-    fn analyze_all<
-        T,
-        U: Typed,
-        F: Fn(&mut parser::Parser<&[u8]>) -> parser::Result<T>,
-        G: FnMut(T) -> Result<U>,
-    >(
-        inputs: &[&[u8]],
-        parse: F,
-        mut analyze: G,
-    ) -> Vec<Result<Type>> {
-        let mut v = Vec::new();
-        for input in inputs {
-            let s = scanner::scan(*input);
-            let mut p = parser::parse(s);
-            let node = parse(&mut p).unwrap();
-            v.push(analyze(node).map(|nd| nd.typ().clone()))
-        }
-        v
-    }
-
     #[test]
     fn test_hello() {
         let input = b"
@@ -210,13 +178,13 @@ mod test {
             defs: vec![
                 Def::FnDef(Func {
                     name: String::from("greet"),
-                    params: vec![TypedParam {
+                    params: vec![Param {
                         name: String::from("name"),
                         typ: TypeSpec::simple("str"),
                         cargo: Type::Str,
                     }],
                     ret: TypeSpec::Void,
-                    body: Block(vec![Stmt::ExprStmt(CallExpr(Call {
+                    body: Block(vec![ExprStmt(CallExpr(Call {
                         target: Box::new(IdentExpr(Ident {
                             name: String::from("println"),
                             cargo: Resolution {
@@ -248,7 +216,7 @@ mod test {
                     name: String::from("main"),
                     params: vec![],
                     ret: TypeSpec::Void,
-                    body: Block(vec![Stmt::ExprStmt(CallExpr(Call {
+                    body: Block(vec![ExprStmt(CallExpr(Call {
                         target: Box::new(IdentExpr(Ident {
                             name: String::from("greet"),
                             cargo: Resolution {
@@ -313,12 +281,12 @@ mod test {
         let expected = Func {
             name: String::from("greet"),
             params: vec![
-                TypedParam {
+                Param {
                     name: String::from("name"),
                     typ: TypeSpec::simple("str"),
                     cargo: Type::Str,
                 },
-                TypedParam {
+                Param {
                     name: String::from("age"),
                     typ: TypeSpec::simple("int"),
                     cargo: Type::Int,
@@ -326,7 +294,7 @@ mod test {
             ],
             ret: TypeSpec::Void,
             body: Block(vec![
-                Stmt::LetStmt(TypedBinding {
+                LetStmt(Binding {
                     name: String::from("age_str"),
                     typ: TypeSpec::simple("str"),
                     expr: CallExpr(Call {
@@ -354,7 +322,7 @@ mod test {
                     }),
                     cargo: Type::Str,
                 }),
-                Stmt::LetStmt(TypedBinding {
+                LetStmt(Binding {
                     name: String::from("greeting"),
                     typ: TypeSpec::simple("str"),
                     expr: CallExpr(Call {
@@ -394,7 +362,7 @@ mod test {
                     }),
                     cargo: Type::Str,
                 }),
-                Stmt::ExprStmt(CallExpr(Call {
+                ExprStmt(CallExpr(Call {
                     target: Box::new(IdentExpr(Ident {
                         name: String::from("println"),
                         cargo: Resolution {
@@ -449,13 +417,13 @@ mod test {
             y;
         }";
         let expected = Block(vec![
-            Stmt::LetStmt(Binding {
+            LetStmt(Binding {
                 name: String::from("x"),
                 typ: TypeSpec::Simple(String::from("int")),
                 expr: IntExpr(Literal { value: 7 }),
                 cargo: Type::Int,
             }),
-            Stmt::LetStmt(Binding {
+            LetStmt(Binding {
                 name: String::from("y"),
                 typ: TypeSpec::Simple(String::from("int")),
                 expr: IdentExpr(Ident {
@@ -470,8 +438,8 @@ mod test {
                 }),
                 cargo: Type::Int,
             }),
-            Stmt::BlockStmt(Block(vec![
-                Stmt::LetStmt(Binding {
+            BlockStmt(Block(vec![
+                LetStmt(Binding {
                     name: String::from("z"),
                     typ: TypeSpec::Simple(String::from("int")),
                     expr: IdentExpr(Ident {
@@ -486,7 +454,7 @@ mod test {
                     }),
                     cargo: Type::Int,
                 }),
-                Stmt::LetStmt(Binding {
+                LetStmt(Binding {
                     name: String::from("y"),
                     typ: TypeSpec::Simple(String::from("int")),
                     expr: IdentExpr(Ident {
@@ -501,7 +469,7 @@ mod test {
                     }),
                     cargo: Type::Int,
                 }),
-                Stmt::LetStmt(Binding {
+                LetStmt(Binding {
                     name: String::from("w"),
                     typ: TypeSpec::Simple(String::from("int")),
                     expr: IdentExpr(Ident {
@@ -516,13 +484,13 @@ mod test {
                     }),
                     cargo: Type::Int,
                 }),
-                Stmt::BlockStmt(Block(vec![Stmt::LetStmt(Binding {
+                BlockStmt(Block(vec![LetStmt(Binding {
                     name: String::from("x"),
                     typ: TypeSpec::Simple(String::from("int")),
                     expr: IntExpr(Literal { value: 7 }),
                     cargo: Type::Int,
                 })])),
-                Stmt::ExprStmt(IdentExpr(Ident {
+                ExprStmt(IdentExpr(Ident {
                     name: String::from("x"),
                     cargo: Resolution {
                         typ: Type::Int,
@@ -533,7 +501,7 @@ mod test {
                     },
                 })),
             ])),
-            Stmt::ExprStmt(IdentExpr(Ident {
+            ExprStmt(IdentExpr(Ident {
                 name: String::from("y"),
                 cargo: Resolution {
                     typ: Type::Int,
@@ -547,6 +515,17 @@ mod test {
         let block = parse(input).block().unwrap();
         let actual = analyze_block(block, &mut ctx).unwrap();
         assert_eq!(expected, actual);
+    }
+
+    fn analyze_exprs(
+        inputs: &[&[u8]],
+        mut ctx: SymbolTable,
+    ) -> Vec<Result<Type>> {
+        inputs
+            .iter()
+            .map(|b| parse(b).expr().unwrap())
+            .map(|e| analyze_expr(e, &mut ctx).map(|e| e.typ()))
+            .collect()
     }
 
     #[test]
@@ -567,14 +546,10 @@ mod test {
         ];
         let expected = vec![
             Err(Error::Arity { want: 2, got: 1 }),
-            Err(Error::TypeMismatch(types::Error {
-                want: String::from("Str"),
-                got: Type::Int,
-            })),
+            Err(Error::TypeMismatch { want: Type::Str, got: Type::Int }),
             Ok(Type::Void),
         ];
-        let actual =
-            analyze_all(inputs, |p| p.expr(), |e| analyze_expr(e, &mut ctx));
+        let actual: Vec<Result<Type>> = analyze_exprs(inputs, ctx.clone());
         assert_eq!(expected, actual);
     }
 
@@ -590,23 +565,16 @@ mod test {
             Ok(Type::Str),
             Err(Error::Undefined(String::from("baz"))),
         ];
-        let actual =
-            analyze_all(inputs, |p| p.expr(), |e| analyze_expr(e, &mut ctx));
+        let actual: Vec<Result<Type>> = analyze_exprs(inputs, ctx.clone());
         assert_eq!(expected, actual);
     }
 
     #[test]
     fn test_literal() {
+        let ctx = SymbolTable::new();
         let inputs: &[&[u8]] = &[b"27", b"\"hello, world\""];
-        let expected = vec![
-            TypedExpr::IntExpr(Literal::new(27)),
-            TypedExpr::StrExpr(Literal::new("hello, world")),
-        ];
-        let actual: Vec<TypedExpr> = inputs
-            .iter()
-            .map(|input| parse(*input).expr().unwrap())
-            .map(|expr| analyze_expr(expr, &mut SymbolTable::new()).unwrap())
-            .collect();
+        let expected = vec![Ok(Type::Int), Ok(Type::Str)];
+        let actual = analyze_exprs(inputs, ctx.clone());
         assert_eq!(expected, actual);
     }
 }

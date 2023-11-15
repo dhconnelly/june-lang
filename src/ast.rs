@@ -142,7 +142,6 @@ pub enum Expr<AST: ASTSpec = UntypedAST> {
     StrExpr(Literal<String>),
     IntExpr(Literal<i64>),
     CallExpr(Call<AST>),
-    FuncExpr(Func<AST>),
 }
 
 pub type TypedExpr = Expr<TypedAST>;
@@ -155,7 +154,6 @@ impl Typed for TypedExpr {
             StrExpr(expr) => expr.typ(),
             IntExpr(expr) => expr.typ(),
             CallExpr(expr) => expr.typ(),
-            FuncExpr(expr) => expr.typ(),
         }
     }
 }
@@ -214,6 +212,17 @@ pub struct Binding<AST: ASTSpec = UntypedAST> {
 }
 
 pub type TypedBinding = Binding<TypedAST>;
+
+impl<AST: ASTSpec> Binding<AST> {
+    pub fn new(
+        name: String,
+        typ: TypeSpec,
+        expr: Expr<AST>,
+        cargo: AST::LetCargo,
+    ) -> Binding<AST> {
+        Binding { name, typ, expr, cargo }
+    }
+}
 
 // =============================================================================
 // Stmt
