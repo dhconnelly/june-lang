@@ -44,18 +44,25 @@ productionization:
 - [ ] skim relevant parts of engineering a compiler
 - [ ] skim relevant parts of types and programming languages
 
+## Purpose
+
+I wanted to write a compiler that targets a VM that I didn't create myself, and
+I wanted to implement static type checking, neither of which I had done before.
+The design is roughly "Go but even simpler" and the feature set corresponds to
+what I think is necessary to solve Advent of Code puzzles.
+
 ## Features
 
-- [ ] builds [wasi](https://wasi.dev) binaries that can be executed by [wasmtime](https://wasmtime.dev)
-- [ ] static typing: programs are checked during compilation
-- [ ] basic types: int, float, bool, string
-- [ ] the usual arithmetic and logical operators
-- [ ] recursion, mutual recursion, forward references for globals
-- [ ] user-defined structs
-- [ ] common collections: maps, sets, vecs
-- [ ] first-class functions with closure
-- [ ] garbage collection
-- [ ] file i/o
+- builds [wasi](https://wasi.dev) binaries that can be executed by [wasmtime](https://wasmtime.dev)
+- static typing: programs are checked during compilation
+- basic types: int, float, bool, string
+- the usual arithmetic and logical operators
+- recursion, mutual recursion, forward references for globals
+- user-defined structs
+- common collections: maps, sets, vecs
+- first-class functions with closure
+- garbage collection
+- file i/o
 
 ## Non-features
 
