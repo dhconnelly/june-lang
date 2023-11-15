@@ -24,7 +24,11 @@ pub struct Parser<R: io::BufRead> {
 }
 
 impl<R: io::BufRead> Parser<R> {
-    fn eof(&mut self) -> bool {
+    pub fn new(scanner: scanner::Scanner<R>) -> Parser<R> {
+        Parser { scanner: scanner.peekable() }
+    }
+
+    pub fn eof(&mut self) -> bool {
         self.scanner.peek().is_none()
     }
 
@@ -165,8 +169,8 @@ impl<R: io::BufRead> Parser<R> {
     }
 }
 
-pub fn parse<R: io::BufRead>(scanner: scanner::Scanner<R>) -> Parser<R> {
-    Parser { scanner: scanner.peekable() }
+pub fn parse<R: io::BufRead>(scanner: scanner::Scanner<R>) -> Result<Program> {
+    Parser::new(scanner).program()
 }
 
 #[cfg(test)]
@@ -174,8 +178,7 @@ mod test {
     use super::*;
 
     fn parse(input: &[u8]) -> Parser<&[u8]> {
-        let s = scanner::scan(input);
-        super::parse(s)
+        Parser { scanner: scanner::scan(input).peekable() }
     }
 
     #[test]

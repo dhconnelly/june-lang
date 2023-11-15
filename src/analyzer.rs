@@ -69,7 +69,7 @@ impl Analyzer {
         let body = self.block(f.body)?;
         let ret = Box::new(self.typ(&f.ret)?);
         let cargo = FnType { params: param_types, ret };
-        let func = TypedFunc { name: f.name, params, body, ret: f.ret, cargo };
+        let func = Func { name: f.name, params, body, ret: f.ret, cargo };
         self.ctx.pop_frame();
         Ok(func)
     }
@@ -172,8 +172,7 @@ mod test {
     use crate::scanner;
 
     fn parse(input: &[u8]) -> parser::Parser<&[u8]> {
-        let s = scanner::scan(input);
-        parser::parse(s)
+        parser::Parser::new(scanner::scan(input))
     }
 
     #[test]
