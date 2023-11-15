@@ -64,7 +64,6 @@ impl ASTSpec for TypedAST {
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Call<AST: ASTSpec = UntypedAST> {
-    // TODO: Rc?
     pub target: Box<Expr<AST>>,
     pub args: Vec<Expr<AST>>,
     pub cargo: AST::CallCargo,

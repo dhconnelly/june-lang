@@ -60,7 +60,7 @@ impl<R: io::BufRead> Parser<R> {
     ) -> Result<Vec<T>> {
         let mut list = Vec::new();
         while !matches!(self.scanner.peek(), Some(Ok(Rparen))) {
-            if list.len() > 0 {
+            if !list.is_empty() {
                 self.eat_tok(Comma)?;
             }
             list.push(f(self)?);
@@ -102,7 +102,7 @@ impl<R: io::BufRead> Parser<R> {
     }
 
     fn let_stmt(&mut self) -> Result<Stmt> {
-        self.eat_tok(Let)?;
+        self.eat_tok(LetTok)?;
         let name = self.eat_ident()?;
         self.eat_tok(Colon)?;
         let typ = self.type_spec()?;
@@ -114,7 +114,7 @@ impl<R: io::BufRead> Parser<R> {
 
     pub fn stmt(&mut self) -> Result<Stmt> {
         match self.scanner.peek() {
-            Some(Ok(Let)) => self.let_stmt(),
+            Some(Ok(LetTok)) => self.let_stmt(),
             Some(Ok(Lbrace)) => Ok(BlockStmt(self.block()?)),
             _ => self.expr_stmt(),
         }

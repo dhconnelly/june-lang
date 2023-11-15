@@ -49,7 +49,7 @@ fn ident_type(s: &str) -> Token {
     use Token::*;
     match s {
         "fn" => FnTok,
-        "let" => Let,
+        "let" => LetTok,
         _ => IdentTok(String::from(s)),
     }
 }
@@ -191,7 +191,7 @@ mod tests {
             Rparen,
             Semi,
             Lbrace,
-            Let,
+            LetTok,
             IdentTok(String::from("foo")),
             Colon,
             IdentTok(String::from("int")),
