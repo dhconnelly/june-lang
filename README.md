@@ -10,8 +10,8 @@ built-ins for string processing, garbage collection):
 - [x] scanner
 - [x] parser
 - [x] analyzer
-- [ ] compiler
-- [ ] wasm serializer
+- [ ] emitter
+- [ ] serializer
 - [ ] end-to-end testing
 - [ ] garbage collection
 
@@ -32,7 +32,7 @@ add features:
 refactoring:
 
 - [ ] avoid copies in ast
-- [ ] static func type in ast
+- [x] static func type in ast
 - [ ] just one From<io::Error> in scanner
 - [ ] add back (line, col) tracking
 - [ ] nice error reporting
@@ -71,6 +71,7 @@ what I think is necessary to solve Advent of Code puzzles.
 - first-class functions
 - subtyping
 - generics for user-defined types
+- algebraic data types
 - concurrency
 
 ## Example
@@ -155,7 +156,7 @@ helped me the most:
 -   [My First Language Frontend with LLVM Tutorial](https://llvm.org/docs/tutorial/MyFirstLanguageFrontend/index.html)
 
 Additionally, I've read most of SICP and poked around in the Engineering
-a Compiler and Modern Compiler Implementation in ML textbook.
+a Compiler and Modern Compiler Implementation in ML textbooks.
 
 I also briefly worked on the GCL team at Google. (GCL is a bizarre internal
 language used to generate protocol buffers in a whole bunch of different
@@ -166,6 +167,10 @@ reasons I didn't stay long enough to have any impact, but I was lucky to have
 the opportunity to review a bunch of code written by the team for a new
 implementation of the language, including some of the bytecode VM and compiler
 as well as garbage collection. This was a good (if short) learning experience.
+
+Before that I also did an internship on the Google Web Toolkit (a Java to
+JavaScript compiler) team, and spent most of an internship on the Google
+Sheets team working on J2ObjC, an Objective-C to JavaScript compiler.
 
 ## License
 

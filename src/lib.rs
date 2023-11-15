@@ -1,8 +1,8 @@
 pub mod analyzer;
 pub mod ast;
 pub mod builtins;
-pub mod compiler;
 pub mod driver;
+pub mod emitter;
 pub mod parser;
 pub mod scanner;
 pub mod symbol_table;

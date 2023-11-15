@@ -8,6 +8,6 @@ pub enum Error {}
 
 type Result<T> = result::Result<T, Error>;
 
-pub fn compile(_program: TypedProgram) -> Result<Vec<Wasm>> {
+pub fn emit(_program: TypedProgram) -> Result<Vec<Wasm>> {
     Ok(Vec::new())
 }

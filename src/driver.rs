@@ -1,5 +1,5 @@
 use crate::analyzer;
-use crate::compiler;
+use crate::emitter;
 use crate::parser;
 use crate::scanner;
 use std::fs;
@@ -20,8 +20,8 @@ pub enum Error {
     ParserError(#[from] parser::Error),
     #[error("analyzer: {0}")]
     AnalyzerError(#[from] analyzer::Error),
-    #[error("compiler: {0}")]
-    CompilerError(#[from] compiler::Error),
+    #[error("emitter: {0}")]
+    EmitterError(#[from] emitter::Error),
 }
 
 pub type Result<T> = result::Result<T, Error>;
@@ -39,7 +39,7 @@ pub fn compile<W: io::Write, R: io::Read>(_w: W, r: R) -> Result<()> {
     let toks = scanner::scan(io::BufReader::new(r));
     let ast = parser::parse(toks)?;
     let typed_ast = analyzer::analyze(ast)?;
-    let wasm = compiler::compile(typed_ast)?;
+    let wasm = emitter::emit(typed_ast)?;
     println!("{:#?}", wasm);
     Ok(())
 }
