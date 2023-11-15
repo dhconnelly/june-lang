@@ -1,3 +1,4 @@
+// TODO: write failure test cases
 use crate::ast::{Expr::*, *};
 use crate::types;
 use crate::types::*;
@@ -12,7 +13,7 @@ pub enum Error {
     #[error("wrong number of arguments: want {want}, got {got}")]
     Arity { want: usize, got: usize },
     #[error("{0}")]
-    Type(#[from] types::Error),
+    TypeMismatch(#[from] types::Error),
     #[error("not callable: {0:?}")]
     InvalidCallable(Type),
     #[error("unknown type: {0}")]
@@ -40,8 +41,9 @@ impl SymbolTable {
         Self { globals: HashMap::new(), frames: Vec::new() }
     }
 
-    fn def_global(&mut self, name: String, typ: Type) {
+    fn def_global<S: Into<String>>(&mut self, name: S, typ: Type) {
         let idx = self.globals.len();
+        let name = name.into();
         self.globals.insert(name, SymbolInfo { idx, typ });
     }
 
@@ -74,10 +76,10 @@ impl SymbolTable {
             .or_else(|| self.get_global(name))
     }
 
-    fn insert(&mut self, name: String, typ: Type) {
+    fn insert<S: Into<String>>(&mut self, name: S, typ: Type) {
         let frame = self.frames.last_mut().unwrap();
         let idx = frame.len();
-        frame.insert(name, SymbolInfo { idx, typ });
+        frame.insert(name.into(), SymbolInfo { idx, typ });
     }
 }
 
@@ -99,6 +101,29 @@ fn check_all(want: &[Type], got: &[TypedExpr]) -> Result<()> {
         let mut pairs = want.iter().zip(got.iter());
         Ok(pairs.try_for_each(|(want, got)| want.check(&got.typ()))?)
     }
+}
+
+fn analyze_func(f: Func, ctx: &mut SymbolTable) -> Result<TypedFunc> {
+    // TODO: look for return statements when we handle return types
+    ctx.push_frame();
+    let mut params = Vec::new();
+    for param in f.params {
+        let typ = resolve_type(&param.typ, ctx)?;
+        params.push(TypedParam {
+            name: param.name.clone(),
+            typ: param.typ,
+            cargo: typ.clone(),
+        });
+        ctx.insert(param.name, typ);
+    }
+    let body = analyze_block(f.body, ctx)?;
+    let cargo = FnType {
+        params: params.iter().map(|param| param.cargo.clone()).collect(),
+        ret: Box::new(resolve_type(&f.ret, ctx)?),
+    };
+    let func = TypedFunc { name: f.name, params, body, ret: f.ret, cargo };
+    ctx.pop_frame();
+    Ok(func)
 }
 
 fn analyze_expr(expr: Expr, ctx: &mut SymbolTable) -> Result<TypedExpr> {
@@ -214,7 +239,160 @@ mod test {
     }
 
     #[test]
-    fn test_blocks() {
+    fn test_func() {
+        let mut ctx = SymbolTable::new();
+        ctx.def_global(
+            "itoa",
+            Type::Fn(FnType {
+                params: vec![Type::Int],
+                ret: Box::new(Type::Str),
+            }),
+        );
+        ctx.def_global(
+            "join",
+            Type::Fn(FnType {
+                params: vec![Type::Str, Type::Str],
+                ret: Box::new(Type::Str),
+            }),
+        );
+        ctx.push_frame();
+        ctx.insert(
+            "println",
+            Type::Fn(FnType {
+                params: vec![Type::Str],
+                ret: Box::new(Type::Void),
+            }),
+        );
+        let input = b"
+            fn greet(name: str, age: int) {
+                let age_str: str = itoa(age);
+                let greeting: str = join(name, age_str);
+                println(greeting);
+            }
+        ";
+        let expected = Func {
+            name: String::from("greet"),
+            params: vec![
+                TypedParam {
+                    name: String::from("name"),
+                    typ: TypeSpec::simple("str"),
+                    cargo: Type::Str,
+                },
+                TypedParam {
+                    name: String::from("age"),
+                    typ: TypeSpec::simple("int"),
+                    cargo: Type::Int,
+                },
+            ],
+            ret: TypeSpec::Void,
+            body: Block(vec![
+                Stmt::LetStmt(TypedBinding {
+                    name: String::from("age_str"),
+                    typ: TypeSpec::simple("str"),
+                    expr: CallExpr(Call {
+                        target: Box::new(IdentExpr(Ident {
+                            name: String::from("itoa"),
+                            cargo: Resolution {
+                                reference: Reference::Global { idx: 0 },
+                                typ: Type::Fn(FnType {
+                                    params: vec![Type::Int],
+                                    ret: Box::new(Type::Str),
+                                }),
+                            },
+                        })),
+                        args: vec![IdentExpr(Ident {
+                            name: String::from("age"),
+                            cargo: Resolution {
+                                reference: Reference::Stack {
+                                    frame_depth: 1,
+                                    frame_idx: 1,
+                                },
+                                typ: Type::Int,
+                            },
+                        })],
+                        cargo: Type::Str,
+                    }),
+                    cargo: Type::Str,
+                }),
+                Stmt::LetStmt(TypedBinding {
+                    name: String::from("greeting"),
+                    typ: TypeSpec::simple("str"),
+                    expr: CallExpr(Call {
+                        target: Box::new(IdentExpr(Ident {
+                            name: String::from("join"),
+                            cargo: Resolution {
+                                reference: Reference::Global { idx: 1 },
+                                typ: Type::Fn(FnType {
+                                    params: vec![Type::Str, Type::Str],
+                                    ret: Box::new(Type::Str),
+                                }),
+                            },
+                        })),
+                        args: vec![
+                            IdentExpr(Ident {
+                                name: String::from("name"),
+                                cargo: Resolution {
+                                    reference: Reference::Stack {
+                                        frame_depth: 1,
+                                        frame_idx: 0,
+                                    },
+                                    typ: Type::Str,
+                                },
+                            }),
+                            IdentExpr(Ident {
+                                name: String::from("age_str"),
+                                cargo: Resolution {
+                                    reference: Reference::Stack {
+                                        frame_depth: 0,
+                                        frame_idx: 0,
+                                    },
+                                    typ: Type::Str,
+                                },
+                            }),
+                        ],
+                        cargo: Type::Str,
+                    }),
+                    cargo: Type::Str,
+                }),
+                Stmt::ExprStmt(CallExpr(Call {
+                    target: Box::new(IdentExpr(Ident {
+                        name: String::from("println"),
+                        cargo: Resolution {
+                            reference: Reference::Stack {
+                                frame_depth: 2,
+                                frame_idx: 0,
+                            },
+                            typ: Type::Fn(FnType {
+                                params: vec![Type::Str],
+                                ret: Box::new(Type::Void),
+                            }),
+                        },
+                    })),
+                    args: vec![IdentExpr(Ident {
+                        name: String::from("greeting"),
+                        cargo: Resolution {
+                            reference: Reference::Stack {
+                                frame_depth: 0,
+                                frame_idx: 1,
+                            },
+                            typ: Type::Str,
+                        },
+                    })],
+                    cargo: Type::Void,
+                })),
+            ]),
+            cargo: FnType {
+                params: vec![Type::Str, Type::Int],
+                ret: Box::new(Type::Void),
+            },
+        };
+        let func = parse(input).fn_expr().unwrap();
+        let actual = analyze_func(func, &mut ctx).unwrap();
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn test_block() {
         let mut ctx = SymbolTable::new();
         let input = b"{
             let x: int = 7;
@@ -332,7 +510,7 @@ mod test {
     }
 
     #[test]
-    fn test_calls() {
+    fn test_call() {
         let mut ctx = SymbolTable::new();
         ctx.push_frame();
         ctx.insert(
@@ -349,7 +527,7 @@ mod test {
         ];
         let expected = vec![
             Err(Error::Arity { want: 2, got: 1 }),
-            Err(Error::Type(types::Error {
+            Err(Error::TypeMismatch(types::Error {
                 want: String::from("Str"),
                 got: Type::Int,
             })),
@@ -361,7 +539,7 @@ mod test {
     }
 
     #[test]
-    fn test_idents() {
+    fn test_ident() {
         let mut ctx = SymbolTable::new();
         ctx.push_frame();
         ctx.insert(String::from("foo"), Type::Int);
@@ -378,7 +556,7 @@ mod test {
     }
 
     #[test]
-    fn test_literals() {
+    fn test_literal() {
         let inputs: &[&[u8]] = &[b"27", b"\"hello, world\""];
         let expected = vec![
             TypedExpr::IntExpr(Literal::new(27)),

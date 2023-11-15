@@ -37,6 +37,7 @@ pub enum Reference {
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Resolution {
+    // TODO: I don't think we need |typ| here
     pub typ: Type,
     pub reference: Reference,
 }

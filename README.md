@@ -65,7 +65,8 @@ This is my eighth hobby language implementation. Here are the previous ones:
     compiler for a dynamic language. Implemented in TypeScript. Manages its own
     heap and implements mark-and-sweep garbage collection rather than
     delegating to the JS runtime. Supports first-class functions with closure
-    and uses this to implement lists and so on.
+    and uses this to implement lists and so on. This was my first experience
+    implementing garbage collection.
 -   [june-old](https://github.com/dhconnelly/june-old) (incomplete): A bytecode
     VM and compiler for a Scheme variant. Implemented in C++. Only compiles and
     evaluates conditionals and assignment.

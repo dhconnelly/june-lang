@@ -169,6 +169,12 @@ pub enum TypeSpec {
     Simple(String),
 }
 
+impl TypeSpec {
+    pub fn simple<S: Into<String>>(s: S) -> TypeSpec {
+        TypeSpec::Simple(s.into())
+    }
+}
+
 // =============================================================================
 // Param
 

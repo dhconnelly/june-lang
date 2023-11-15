@@ -42,7 +42,7 @@ pub struct Scanner<R: io::BufRead> {
 }
 
 fn is_delim(b: u8) -> bool {
-    !b.is_ascii_alphanumeric()
+    !b.is_ascii_alphanumeric() && b != b'_'
 }
 
 fn ident_type(s: &str) -> Token {
