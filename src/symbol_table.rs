@@ -55,7 +55,7 @@ impl SymbolTable {
             .or_else(|| self.get_global(name))
     }
 
-    pub fn insert<S: Into<String>>(&mut self, name: S, typ: Type) {
+    pub fn def_local<S: Into<String>>(&mut self, name: S, typ: Type) {
         let frame = self.frames.last_mut().unwrap();
         let idx = frame.len();
         frame.insert(name.into(), SymbolInfo { idx, typ });
