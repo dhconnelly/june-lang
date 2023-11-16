@@ -39,7 +39,7 @@ pub fn compile<W: io::Write, R: io::Read>(_w: W, r: R) -> Result<()> {
     let toks = scanner::scan(io::BufReader::new(r));
     let ast = parser::parse(toks)?;
     let typed_ast = analyzer::analyze(ast)?;
-    let wasm = emitter::emit(typed_ast)?;
+    let wasm = emitter::emit(&typed_ast)?;
     println!("{:#?}", wasm);
     Ok(())
 }
