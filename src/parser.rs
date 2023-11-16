@@ -76,7 +76,7 @@ impl<R: io::BufRead> Parser<R> {
         let prim = match self.scanner.next().ok_or(Error::UnexpectedEOF)?? {
             Str(value) => Ok(StrExpr(Literal::new(value))),
             Int(value) => Ok(IntExpr(Literal::new(value))),
-            IdentTok(name) => Ok(IdentExpr(Ident { name, cargo: () })),
+            IdentTok(name) => Ok(IdentExpr(Ident { name, resolution: () })),
             Lparen => {
                 let expr = self.expr()?;
                 self.eat_tok(Rparen)?;
@@ -113,7 +113,7 @@ impl<R: io::BufRead> Parser<R> {
         self.eat_tok(Eq)?;
         let expr = self.expr()?;
         self.eat_tok(Semi)?;
-        Ok(LetStmt(Binding { name, typ, expr, cargo: () }))
+        Ok(LetStmt(Binding { name, typ, expr, resolved_type: () }))
     }
 
     pub fn stmt(&mut self) -> Result<Stmt> {
@@ -266,7 +266,7 @@ mod test {
             name: String::from("foo"),
             typ: TypeSpec::Simple(String::from("int")),
             expr: IntExpr(Literal::new(7)),
-            cargo: (),
+            resolved_type: (),
         });
         let actual = parse(input).let_stmt().unwrap();
         assert_eq!(expected, actual);

@@ -61,15 +61,17 @@ impl Analyzer {
         self.ctx.push_frame();
         let (mut param_types, mut params) = (Vec::new(), Vec::new());
         for param in f.params {
-            let typ = self.typ(&param.typ)?;
-            self.ctx.def_local(param.name.clone(), typ.clone());
-            param_types.push(typ.clone());
-            params.push(Param { name: param.name, typ: param.typ, cargo: typ });
+            let (name, typ) = (param.name, param.typ);
+            let resolved_type = self.typ(&typ)?;
+            self.ctx.def_local(name.clone(), resolved_type.clone());
+            param_types.push(resolved_type.clone());
+            params.push(Param { name, typ, resolved_type });
         }
         let body = self.block(f.body)?;
         let ret = Box::new(self.typ(&f.ret)?);
-        let cargo = FnType { params: param_types, ret };
-        let func = Func { name: f.name, params, body, ret: f.ret, cargo };
+        let resolved_type = FnType { params: param_types, ret };
+        let func =
+            Func { name: f.name, params, body, ret: f.ret, resolved_type };
         self.ctx.pop_frame();
         Ok(func)
     }
@@ -83,7 +85,7 @@ impl Analyzer {
                 .map(|e| self.expr(e))
                 .collect::<Result<Vec<TypedExpr>>>()?;
             check_all(&f.params, &args)?;
-            Ok(Call { target, args, cargo: *f.ret })
+            Ok(Call { target, args, resolved_type: *f.ret })
         } else {
             Err(Error::InvalidCallable(target.typ()))
         }
@@ -93,7 +95,7 @@ impl Analyzer {
         let name = ident.name;
         let cargo =
             self.ctx.get(&name).ok_or(Error::Undefined(name.clone()))?;
-        Ok(IdentExpr(Ident { name, cargo }))
+        Ok(IdentExpr(Ident { name, resolution: cargo }))
     }
 
     fn expr(&mut self, expr: Expr) -> Result<TypedExpr> {
@@ -147,7 +149,7 @@ impl Analyzer {
                 let func = self.func(f)?;
                 self.ctx.def_global(
                     func.name.clone(),
-                    Type::Fn(func.cargo.clone()),
+                    Type::Fn(func.resolved_type.clone()),
                 );
                 Ok(FnDef(func))
             }
@@ -194,13 +196,13 @@ mod test {
                     params: vec![Param {
                         name: String::from("name"),
                         typ: TypeSpec::simple("str"),
-                        cargo: Type::Str,
+                        resolved_type: Type::Str,
                     }],
                     ret: TypeSpec::Void,
                     body: Block(vec![ExprStmt(CallExpr(Call {
                         target: Box::new(IdentExpr(Ident {
                             name: String::from("println"),
-                            cargo: Resolution {
+                            resolution: Resolution {
                                 reference: Reference::Global { idx: 0 },
                                 typ: Type::Fn(FnType {
                                     params: vec![Type::Str],
@@ -210,7 +212,7 @@ mod test {
                         })),
                         args: vec![IdentExpr(Ident {
                             name: String::from("name"),
-                            cargo: Resolution {
+                            resolution: Resolution {
                                 reference: Reference::Stack {
                                     frame_depth: 1,
                                     frame_idx: 0,
@@ -218,9 +220,9 @@ mod test {
                                 typ: Type::Str,
                             },
                         })],
-                        cargo: Type::Void,
+                        resolved_type: Type::Void,
                     }))]),
-                    cargo: FnType {
+                    resolved_type: FnType {
                         params: vec![Type::Str],
                         ret: Box::new(Type::Void),
                     },
@@ -232,7 +234,7 @@ mod test {
                     body: Block(vec![ExprStmt(CallExpr(Call {
                         target: Box::new(IdentExpr(Ident {
                             name: String::from("greet"),
-                            cargo: Resolution {
+                            resolution: Resolution {
                                 reference: Reference::Global { idx: 1 },
                                 typ: Type::Fn(FnType {
                                     params: vec![Type::Str],
@@ -241,9 +243,12 @@ mod test {
                             },
                         })),
                         args: vec![StrExpr(Literal::new("the pope"))],
-                        cargo: Type::Void,
+                        resolved_type: Type::Void,
                     }))]),
-                    cargo: FnType { params: vec![], ret: Box::new(Type::Void) },
+                    resolved_type: FnType {
+                        params: vec![],
+                        ret: Box::new(Type::Void),
+                    },
                 }),
             ],
         };
@@ -297,12 +302,12 @@ mod test {
                 Param {
                     name: String::from("name"),
                     typ: TypeSpec::simple("str"),
-                    cargo: Type::Str,
+                    resolved_type: Type::Str,
                 },
                 Param {
                     name: String::from("age"),
                     typ: TypeSpec::simple("int"),
-                    cargo: Type::Int,
+                    resolved_type: Type::Int,
                 },
             ],
             ret: TypeSpec::Void,
@@ -313,7 +318,7 @@ mod test {
                     expr: CallExpr(Call {
                         target: Box::new(IdentExpr(Ident {
                             name: String::from("itoa"),
-                            cargo: Resolution {
+                            resolution: Resolution {
                                 reference: Reference::Global { idx: 0 },
                                 typ: Type::Fn(FnType {
                                     params: vec![Type::Int],
@@ -323,7 +328,7 @@ mod test {
                         })),
                         args: vec![IdentExpr(Ident {
                             name: String::from("age"),
-                            cargo: Resolution {
+                            resolution: Resolution {
                                 reference: Reference::Stack {
                                     frame_depth: 1,
                                     frame_idx: 1,
@@ -331,9 +336,9 @@ mod test {
                                 typ: Type::Int,
                             },
                         })],
-                        cargo: Type::Str,
+                        resolved_type: Type::Str,
                     }),
-                    cargo: Type::Str,
+                    resolved_type: Type::Str,
                 }),
                 LetStmt(Binding {
                     name: String::from("greeting"),
@@ -341,7 +346,7 @@ mod test {
                     expr: CallExpr(Call {
                         target: Box::new(IdentExpr(Ident {
                             name: String::from("join"),
-                            cargo: Resolution {
+                            resolution: Resolution {
                                 reference: Reference::Global { idx: 1 },
                                 typ: Type::Fn(FnType {
                                     params: vec![Type::Str, Type::Str],
@@ -352,7 +357,7 @@ mod test {
                         args: vec![
                             IdentExpr(Ident {
                                 name: String::from("name"),
-                                cargo: Resolution {
+                                resolution: Resolution {
                                     reference: Reference::Stack {
                                         frame_depth: 1,
                                         frame_idx: 0,
@@ -362,7 +367,7 @@ mod test {
                             }),
                             IdentExpr(Ident {
                                 name: String::from("age_str"),
-                                cargo: Resolution {
+                                resolution: Resolution {
                                     reference: Reference::Stack {
                                         frame_depth: 0,
                                         frame_idx: 0,
@@ -371,14 +376,14 @@ mod test {
                                 },
                             }),
                         ],
-                        cargo: Type::Str,
+                        resolved_type: Type::Str,
                     }),
-                    cargo: Type::Str,
+                    resolved_type: Type::Str,
                 }),
                 ExprStmt(CallExpr(Call {
                     target: Box::new(IdentExpr(Ident {
                         name: String::from("println"),
-                        cargo: Resolution {
+                        resolution: Resolution {
                             reference: Reference::Stack {
                                 frame_depth: 2,
                                 frame_idx: 0,
@@ -391,7 +396,7 @@ mod test {
                     })),
                     args: vec![IdentExpr(Ident {
                         name: String::from("greeting"),
-                        cargo: Resolution {
+                        resolution: Resolution {
                             reference: Reference::Stack {
                                 frame_depth: 0,
                                 frame_idx: 1,
@@ -399,10 +404,10 @@ mod test {
                             typ: Type::Str,
                         },
                     })],
-                    cargo: Type::Void,
+                    resolved_type: Type::Void,
                 })),
             ]),
-            cargo: FnType {
+            resolved_type: FnType {
                 params: vec![Type::Str, Type::Int],
                 ret: Box::new(Type::Void),
             },
@@ -433,14 +438,14 @@ mod test {
                 name: String::from("x"),
                 typ: TypeSpec::Simple(String::from("int")),
                 expr: IntExpr(Literal { value: 7 }),
-                cargo: Type::Int,
+                resolved_type: Type::Int,
             }),
             LetStmt(Binding {
                 name: String::from("y"),
                 typ: TypeSpec::Simple(String::from("int")),
                 expr: IdentExpr(Ident {
                     name: String::from("x"),
-                    cargo: Resolution {
+                    resolution: Resolution {
                         typ: Type::Int,
                         reference: Reference::Stack {
                             frame_depth: 0,
@@ -448,7 +453,7 @@ mod test {
                         },
                     },
                 }),
-                cargo: Type::Int,
+                resolved_type: Type::Int,
             }),
             BlockStmt(Block(vec![
                 LetStmt(Binding {
@@ -456,7 +461,7 @@ mod test {
                     typ: TypeSpec::Simple(String::from("int")),
                     expr: IdentExpr(Ident {
                         name: String::from("y"),
-                        cargo: Resolution {
+                        resolution: Resolution {
                             typ: Type::Int,
                             reference: Reference::Stack {
                                 frame_depth: 1,
@@ -464,14 +469,14 @@ mod test {
                             },
                         },
                     }),
-                    cargo: Type::Int,
+                    resolved_type: Type::Int,
                 }),
                 LetStmt(Binding {
                     name: String::from("y"),
                     typ: TypeSpec::Simple(String::from("int")),
                     expr: IdentExpr(Ident {
                         name: String::from("x"),
-                        cargo: Resolution {
+                        resolution: Resolution {
                             typ: Type::Int,
                             reference: Reference::Stack {
                                 frame_depth: 1,
@@ -479,14 +484,14 @@ mod test {
                             },
                         },
                     }),
-                    cargo: Type::Int,
+                    resolved_type: Type::Int,
                 }),
                 LetStmt(Binding {
                     name: String::from("w"),
                     typ: TypeSpec::Simple(String::from("int")),
                     expr: IdentExpr(Ident {
                         name: String::from("y"),
-                        cargo: Resolution {
+                        resolution: Resolution {
                             typ: Type::Int,
                             reference: Reference::Stack {
                                 frame_depth: 0,
@@ -494,17 +499,17 @@ mod test {
                             },
                         },
                     }),
-                    cargo: Type::Int,
+                    resolved_type: Type::Int,
                 }),
                 BlockStmt(Block(vec![LetStmt(Binding {
                     name: String::from("x"),
                     typ: TypeSpec::Simple(String::from("int")),
                     expr: IntExpr(Literal { value: 7 }),
-                    cargo: Type::Int,
+                    resolved_type: Type::Int,
                 })])),
                 ExprStmt(IdentExpr(Ident {
                     name: String::from("x"),
-                    cargo: Resolution {
+                    resolution: Resolution {
                         typ: Type::Int,
                         reference: Reference::Stack {
                             frame_depth: 1,
@@ -515,7 +520,7 @@ mod test {
             ])),
             ExprStmt(IdentExpr(Ident {
                 name: String::from("y"),
-                cargo: Resolution {
+                resolution: Resolution {
                     typ: Type::Int,
                     reference: Reference::Stack {
                         frame_depth: 0,

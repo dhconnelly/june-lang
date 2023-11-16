@@ -18,21 +18,13 @@ use std::fmt;
 // - https://www.reddit.com/r/ProgrammingLanguages/comments/b7fvlv/ast_and_tast/
 // - https://www.reddit.com/r/Compilers/comments/x3d3r6/type_information_in_the_ast/
 
-pub trait ASTSpec
-where
-    <Self as ASTSpec>::CallCargo: fmt::Debug + Clone + PartialEq + Eq,
-    <Self as ASTSpec>::IdentCargo: fmt::Debug + Clone + PartialEq + Eq,
-    <Self as ASTSpec>::ExprCargo: fmt::Debug + Clone + PartialEq + Eq,
-    <Self as ASTSpec>::ParamCargo: fmt::Debug + Clone + PartialEq + Eq,
-    <Self as ASTSpec>::FuncCargo: fmt::Debug + Clone + PartialEq + Eq,
-    <Self as ASTSpec>::LetCargo: fmt::Debug + Clone + PartialEq + Eq,
-{
-    type CallCargo;
-    type IdentCargo;
-    type ExprCargo;
-    type ParamCargo;
-    type FuncCargo;
-    type LetCargo;
+pub trait ASTSpec {
+    type CallCargo: fmt::Debug + PartialEq + Eq + Clone;
+    type IdentCargo: fmt::Debug + PartialEq + Eq + Clone;
+    type ExprCargo: fmt::Debug + PartialEq + Eq + Clone;
+    type ParamCargo: fmt::Debug + PartialEq + Eq + Clone;
+    type FuncCargo: fmt::Debug + PartialEq + Eq + Clone;
+    type LetCargo: fmt::Debug + PartialEq + Eq + Clone;
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -66,12 +58,12 @@ impl ASTSpec for TypedAST {
 pub struct Call<AST: ASTSpec = UntypedAST> {
     pub target: Box<Expr<AST>>,
     pub args: Vec<Expr<AST>>,
-    pub cargo: AST::CallCargo,
+    pub resolved_type: AST::CallCargo,
 }
 
 impl Call<UntypedAST> {
     pub fn untyped(target: Expr, args: Vec<Expr>) -> Call<UntypedAST> {
-        Call { target: Box::new(target), args, cargo: () }
+        Call { target: Box::new(target), args, resolved_type: () }
     }
 }
 
@@ -79,7 +71,7 @@ pub type TypedCall = Call<TypedAST>;
 
 impl Typed for TypedCall {
     fn typ(&self) -> Type {
-        self.cargo.clone()
+        self.resolved_type.clone()
     }
 }
 
@@ -115,12 +107,12 @@ impl Typed for Literal<i64> {
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Ident<AST: ASTSpec = UntypedAST> {
     pub name: String,
-    pub cargo: AST::IdentCargo,
+    pub resolution: AST::IdentCargo,
 }
 
 impl Ident<UntypedAST> {
     pub fn untyped<S: Into<String>>(name: S) -> Ident<UntypedAST> {
-        Ident { name: name.into(), cargo: () }
+        Ident { name: name.into(), resolution: () }
     }
 }
 
@@ -128,7 +120,7 @@ pub type TypedIdent = Ident<TypedAST>;
 
 impl Typed for TypedIdent {
     fn typ(&self) -> Type {
-        self.cargo.typ.clone()
+        self.resolution.typ.clone()
     }
 }
 
@@ -179,7 +171,7 @@ impl TypeSpec {
 pub struct Param<AST: ASTSpec = UntypedAST> {
     pub name: String,
     pub typ: TypeSpec,
-    pub cargo: AST::ParamCargo,
+    pub resolved_type: AST::ParamCargo,
 }
 
 impl Param<UntypedAST> {
@@ -187,7 +179,7 @@ impl Param<UntypedAST> {
         name: S,
         typ: TypeSpec,
     ) -> Param<UntypedAST> {
-        Param { name: name.into(), typ, cargo: () }
+        Param { name: name.into(), typ, resolved_type: () }
     }
 }
 
@@ -195,7 +187,7 @@ pub type TypedParam = Param<TypedAST>;
 
 impl Typed for TypedParam {
     fn typ(&self) -> Type {
-        self.cargo.clone()
+        self.resolved_type.clone()
     }
 }
 
@@ -207,7 +199,7 @@ pub struct Binding<AST: ASTSpec = UntypedAST> {
     pub name: String,
     pub typ: TypeSpec,
     pub expr: Expr<AST>,
-    pub cargo: AST::LetCargo,
+    pub resolved_type: AST::LetCargo,
 }
 
 pub type TypedBinding = Binding<TypedAST>;
@@ -217,9 +209,9 @@ impl<AST: ASTSpec> Binding<AST> {
         name: String,
         typ: TypeSpec,
         expr: Expr<AST>,
-        cargo: AST::LetCargo,
+        resolved_type: AST::LetCargo,
     ) -> Binding<AST> {
-        Binding { name, typ, expr, cargo }
+        Binding { name, typ, expr, resolved_type }
     }
 }
 
@@ -252,7 +244,7 @@ pub struct Func<AST: ASTSpec = UntypedAST> {
     pub params: Vec<Param<AST>>,
     pub body: Block<AST>,
     pub ret: TypeSpec,
-    pub cargo: AST::FuncCargo,
+    pub resolved_type: AST::FuncCargo,
 }
 
 impl Func<UntypedAST> {
@@ -262,7 +254,7 @@ impl Func<UntypedAST> {
         body: Block,
         ret: TypeSpec,
     ) -> Func<UntypedAST> {
-        Func { name: name.into(), params, body, ret, cargo: () }
+        Func { name: name.into(), params, body, ret, resolved_type: () }
     }
 }
 
@@ -270,7 +262,7 @@ pub type TypedFunc = Func<TypedAST>;
 
 impl Typed for TypedFunc {
     fn typ(&self) -> Type {
-        Type::Fn(self.cargo.clone())
+        Type::Fn(self.resolved_type.clone())
     }
 }
 
