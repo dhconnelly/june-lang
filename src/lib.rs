@@ -5,6 +5,7 @@ pub mod driver;
 pub mod emitter;
 pub mod parser;
 pub mod scanner;
+pub mod serializer;
 pub mod symbol_table;
 pub mod token;
 pub mod types;

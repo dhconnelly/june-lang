@@ -2,6 +2,7 @@ use crate::analyzer;
 use crate::emitter;
 use crate::parser;
 use crate::scanner;
+use crate::serializer;
 use std::fs;
 use std::io;
 use std::path;
@@ -22,6 +23,8 @@ pub enum Error {
     AnalyzerError(#[from] analyzer::Error),
     #[error("emitter: {0}")]
     EmitterError(#[from] emitter::Error),
+    #[error("serializer: {0}")]
+    SerializerError(#[from] serializer::Error),
 }
 
 pub type Result<T> = result::Result<T, Error>;
@@ -35,13 +38,13 @@ fn make_output_path(p: &path::Path) -> Result<path::PathBuf> {
     }
 }
 
-pub fn compile<W: io::Write, R: io::Read>(_w: W, r: R) -> Result<()> {
+pub fn compile<W: io::Write, R: io::Read>(w: W, r: R) -> Result<()> {
     let toks = scanner::scan(io::BufReader::new(r));
     let ast = parser::parse(toks)?;
     let typed_ast = analyzer::analyze(ast)?;
     let wasm = emitter::emit(&typed_ast)?;
     println!("{:#?}", wasm);
-    Ok(())
+    Ok(serializer::serialize(w, &wasm)?)
 }
 
 pub fn compile_file<P: Into<path::PathBuf>>(input_path: P) -> Result<()> {
