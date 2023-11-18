@@ -38,13 +38,13 @@ fn make_output_path(p: &path::Path) -> Result<path::PathBuf> {
     }
 }
 
-pub fn compile<W: io::Write, R: io::Read>(w: W, r: R) -> Result<()> {
+pub fn compile<W: io::Write, R: io::Read>(mut w: W, r: R) -> Result<()> {
     let toks = scanner::scan(io::BufReader::new(r));
     let ast = parser::parse(toks)?;
     let typed_ast = analyzer::analyze(ast)?;
     let wasm = translator::translate(&typed_ast)?;
     println!("{:#?}", wasm);
-    Ok(emitter::emit(w, &wasm)?)
+    Ok(emitter::emit(&mut w, &wasm)?)
 }
 
 pub fn compile_file<P: Into<path::PathBuf>>(input_path: P) -> Result<()> {
