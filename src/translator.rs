@@ -23,19 +23,13 @@ impl Translator {
                     wasm::ValType::NumType(wasm::NumType::I64),
                     wasm::ValType::NumType(wasm::NumType::I64),
                 ],
-                results: vec![
-                    /*
-                    wasm::ValType::NumType(wasm::NumType::I64),
-                    */
-                ],
+                results: vec![wasm::ValType::NumType(wasm::NumType::I64)],
             }])),
             code: Some(wasm::CodeSection(vec![wasm::Code {
                 body: vec![
-                    /*
                     wasm::Instr::GetLocal(0),
                     wasm::Instr::GetLocal(1),
                     wasm::Instr::Add(wasm::NumType::I64),
-                    */
                     wasm::Instr::End,
                 ],
                 locals: vec![],

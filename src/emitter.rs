@@ -29,9 +29,13 @@ trait Writable<W: Write> {
 
 // https://webassembly.github.io/spec/core/binary/index.html
 
-fn write_len<W: Write>(w: &mut W, int: usize) -> Result<()> {
-    let int: u32 = int.try_into().or(Err(Error::LengthError(int)))?;
+fn write_unsigned<W: Write>(w: &mut W, int: u32) -> Result<()> {
     leb128::write::unsigned(w, int as u64)?;
+    Ok(())
+}
+
+fn write_len<W: Write>(w: &mut W, int: usize) -> Result<()> {
+    write_unsigned(w, int.try_into().or(Err(Error::LengthError(int)))?)?;
     Ok(())
 }
 
@@ -75,7 +79,7 @@ impl<W: Write> Writable<W> for TypeSection {
 
 impl<W: Write> Writable<W> for Func {
     fn write(&self, w: &mut W) -> Result<()> {
-        leb128::write::unsigned(w, self.typeidx as u64)?;
+        write_unsigned(w, self.typeidx)?;
         Ok(())
     }
 }
@@ -95,7 +99,11 @@ impl<W: Write> Writable<W> for Instr {
     fn write(&self, w: &mut W) -> Result<()> {
         match self {
             Instr::End => w.write_all(&[0x0B])?,
-            _ => todo!(),
+            Instr::Add(NumType::I64) => w.write_all(&[0x7C])?,
+            Instr::GetLocal(idx) => {
+                w.write_all(&[0x20])?;
+                write_unsigned(w, *idx)?;
+            }
         }
         Ok(())
     }
@@ -105,7 +113,9 @@ impl<W: Write> Writable<W> for Code {
     fn write(&self, w: &mut W) -> Result<()> {
         let mut buf = Vec::new();
         vec(&mut buf, &self.locals)?;
-        vec(&mut buf, &self.body)?;
+        for instr in &self.body {
+            instr.write(&mut buf)?;
+        }
         write_len(w, buf.len())?;
         w.write_all(&buf)?;
         Ok(())
@@ -130,7 +140,7 @@ impl<W: Write> Writable<W> for Export {
         match self.desc {
             ExportDesc::Func(idx) => {
                 w.write_all(&[0x00])?;
-                leb128::write::unsigned(w, idx as u64)?;
+                write_unsigned(w, idx)?;
             }
         }
         Ok(())
