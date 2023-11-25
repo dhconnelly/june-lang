@@ -1,5 +1,6 @@
 use crate::analyzer;
 use crate::emitter;
+use crate::imports;
 use crate::parser;
 use crate::scanner;
 use crate::translator;
@@ -8,6 +9,7 @@ use std::io;
 use std::path;
 use std::result;
 use thiserror::Error;
+use wasmtime;
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -25,6 +27,8 @@ pub enum Error {
     TranslatorError(#[from] translator::Error),
     #[error("emitter: {0}")]
     EmitterError(#[from] emitter::Error),
+    #[error("wasmtime: {0}")]
+    Wasmtime(#[from] wasmtime::Error),
 }
 
 pub type Result<T> = result::Result<T, Error>;
@@ -56,4 +60,13 @@ pub fn compile_file<P: Into<path::PathBuf>>(input_path: P) -> Result<()> {
     let w = fs::File::create(&output_path)
         .map_err(|err| Error::IOError { path: output_path, err })?;
     compile(w, r)
+}
+
+pub fn execute<P: AsRef<path::Path>>(input_path: P) -> Result<()> {
+    let engine = wasmtime::Engine::default();
+    let module = wasmtime::Module::from_file(&engine, input_path)?;
+    let mut store = wasmtime::Store::new(&engine, ());
+    let imports = imports::make_imports(&mut store);
+    wasmtime::Instance::new(&mut store, &module, &imports)?;
+    Ok(())
 }

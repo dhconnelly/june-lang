@@ -52,8 +52,23 @@ pub struct Export {
     pub desc: ExportDesc,
 }
 
+#[derive(Debug)]
+pub enum ImportedValue {
+    Func(u32),
+}
+
+#[derive(Debug)]
+pub struct Import {
+    pub module: String,
+    pub name: String,
+    pub import: ImportedValue,
+}
+
 #[derive(Debug, Default)]
 pub struct TypeSection(pub Vec<FuncType>);
+
+#[derive(Debug, Default)]
+pub struct ImportSection(pub Vec<Import>);
 
 #[derive(Debug, Default)]
 pub struct FuncSection(pub Vec<Func>);
@@ -67,18 +82,10 @@ pub struct CodeSection(pub Vec<Code>);
 #[derive(Debug, Default)]
 pub struct StartSection(pub u32);
 
-#[derive(Debug)]
-pub enum Section {
-    Type(TypeSection),
-    Func(FuncSection),
-    Export(ExportSection),
-    Code(CodeSection),
-    Start(StartSection),
-}
-
 #[derive(Debug, Default)]
 pub struct Module {
     pub types: TypeSection,
+    pub imports: ImportSection,
     pub funcs: FuncSection,
     pub exports: ExportSection,
     pub start: StartSection,
