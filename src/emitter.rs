@@ -15,13 +15,8 @@ pub enum Error {
 
 pub type Result<T> = result::Result<T, Error>;
 
-const HEADER: &'static [u8] = &[0x00, 0x61, 0x73, 0x6d];
-const VERSION: &'static [u8] = &[0x01, 0x00, 0x00, 0x00];
-
-static TYPE_SECTION: u8 = 1;
-static FUNCTION_SECTION: u8 = 3;
-static EXPORT_SECTION: u8 = 7;
-static CODE_SECTION: u8 = 10;
+const HEADER: &[u8] = &[0x00, 0x61, 0x73, 0x6d];
+const VERSION: &[u8] = &[0x01, 0x00, 0x00, 0x00];
 
 trait Writable<W: Write> {
     fn write(&self, w: &mut W) -> Result<()>;
@@ -34,13 +29,13 @@ fn write_unsigned<W: Write>(w: &mut W, int: u32) -> Result<()> {
     Ok(())
 }
 
-fn write_len<W: Write>(w: &mut W, int: usize) -> Result<()> {
-    write_unsigned(w, int.try_into().or(Err(Error::LengthError(int)))?)?;
+fn write_len<W: Write>(w: &mut W, len: usize) -> Result<()> {
+    let len = len.try_into().or(Err(Error::LengthError(len)))?;
+    write_unsigned(w, len)?;
     Ok(())
 }
 
 fn vec<W: Write, T: Writable<W>>(w: &mut W, v: &[T]) -> Result<()> {
-    // https://webassembly.github.io/spec/core/binary/conventions.html#vectors
     write_len(w, v.len())?;
     for item in v {
         item.write(w)?;
@@ -66,17 +61,6 @@ impl<W: Write> Writable<W> for FuncType {
     }
 }
 
-impl<W: Write> Writable<W> for TypeSection {
-    fn write(&self, w: &mut W) -> Result<()> {
-        w.write_all(&[TYPE_SECTION])?;
-        let mut buf = Vec::new();
-        vec(&mut buf, &self.0)?;
-        write_len(w, buf.len())?;
-        w.write_all(&buf)?;
-        Ok(())
-    }
-}
-
 impl<W: Write> Writable<W> for Func {
     fn write(&self, w: &mut W) -> Result<()> {
         write_unsigned(w, self.typeidx)?;
@@ -84,13 +68,14 @@ impl<W: Write> Writable<W> for Func {
     }
 }
 
-impl<W: Write> Writable<W> for FuncSection {
+impl<W: Write> Writable<W> for Const {
     fn write(&self, w: &mut W) -> Result<()> {
-        w.write_all(&[FUNCTION_SECTION])?;
-        let mut buf = Vec::new();
-        vec(&mut buf, &self.0)?;
-        write_len(w, buf.len())?;
-        w.write_all(&buf)?;
+        match self {
+            Const::I64(x) => {
+                w.write_all(&[0x42])?;
+                leb128::write::signed(w, *x)?;
+            }
+        }
         Ok(())
     }
 }
@@ -99,7 +84,14 @@ impl<W: Write> Writable<W> for Instr {
     fn write(&self, w: &mut W) -> Result<()> {
         match self {
             Instr::End => w.write_all(&[0x0B])?,
-            Instr::Add(NumType::I64) => w.write_all(&[0x7C])?,
+            Instr::Drop => w.write_all(&[0x1A])?,
+            Instr::AddI64 => w.write_all(&[0x7C])?,
+            Instr::SubI64 => w.write_all(&[0x7D])?,
+            Instr::Const(val) => val.write(w)?,
+            Instr::Call(idx) => {
+                w.write_all(&[0x10])?;
+                write_unsigned(w, *idx)?;
+            }
             Instr::GetLocal(idx) => {
                 w.write_all(&[0x20])?;
                 write_unsigned(w, *idx)?;
@@ -122,17 +114,6 @@ impl<W: Write> Writable<W> for Code {
     }
 }
 
-impl<W: Write> Writable<W> for CodeSection {
-    fn write(&self, w: &mut W) -> Result<()> {
-        w.write_all(&[CODE_SECTION])?;
-        let mut buf = Vec::new();
-        vec(&mut buf, &self.0)?;
-        write_len(w, buf.len())?;
-        w.write_all(&buf)?;
-        Ok(())
-    }
-}
-
 impl<W: Write> Writable<W> for Export {
     fn write(&self, w: &mut W) -> Result<()> {
         write_len(w, self.name.len())?;
@@ -147,34 +128,40 @@ impl<W: Write> Writable<W> for Export {
     }
 }
 
-impl<W: Write> Writable<W> for ExportSection {
+fn section_index(section: &Section) -> u8 {
+    match section {
+        Section::Type(_) => 1,
+        Section::Func(_) => 3,
+        Section::Export(_) => 7,
+        Section::Start(_) => 8,
+        Section::Code(_) => 10,
+    }
+}
+
+impl<W: Write> Writable<W> for Section {
     fn write(&self, w: &mut W) -> Result<()> {
-        w.write_all(&[EXPORT_SECTION])?;
+        w.write_all(&[section_index(self)])?;
         let mut buf = Vec::new();
-        vec(&mut buf, &self.0)?;
+        match self {
+            Section::Type(types) => vec(&mut buf, &types.0)?,
+            Section::Func(funcs) => vec(&mut buf, &funcs.0)?,
+            Section::Export(exports) => vec(&mut buf, &exports.0)?,
+            Section::Start(start) => write_unsigned(&mut buf, start.0)?,
+            Section::Code(code) => vec(&mut buf, &code.0)?,
+        }
         write_len(w, buf.len())?;
         w.write_all(&buf)?;
         Ok(())
     }
 }
 
-fn write_section<W: Write, Section: Writable<W>>(
-    w: &mut W,
-    section: Option<&Section>,
-) -> Result<()> {
-    if let Some(section) = section {
-        section.write(w)
-    } else {
-        Ok(())
-    }
-}
-
-pub fn emit<W: Write>(w: &mut W, module: &Module) -> Result<()> {
+pub fn emit<W: Write>(w: &mut W, module: Module) -> Result<()> {
     w.write_all(HEADER)?;
     w.write_all(VERSION)?;
-    write_section(w, module.types.as_ref())?;
-    write_section(w, module.funcs.as_ref())?;
-    write_section(w, module.exports.as_ref())?;
-    write_section(w, module.code.as_ref())?;
+    Section::Type(module.types).write(w)?;
+    Section::Func(module.funcs).write(w)?;
+    Section::Export(module.exports).write(w)?;
+    Section::Start(module.start).write(w)?;
+    Section::Code(module.code).write(w)?;
     Ok(())
 }

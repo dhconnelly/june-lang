@@ -44,7 +44,7 @@ pub fn compile<W: io::Write, R: io::Read>(mut w: W, r: R) -> Result<()> {
     let typed_ast = analyzer::analyze(ast)?;
     let wasm = translator::translate(&typed_ast)?;
     println!("{:#?}", wasm);
-    Ok(emitter::emit(&mut w, &wasm)?)
+    Ok(emitter::emit(&mut w, wasm)?)
 }
 
 pub fn compile_file<P: Into<path::PathBuf>>(input_path: P) -> Result<()> {

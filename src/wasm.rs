@@ -9,6 +9,11 @@ pub enum ValType {
 }
 
 #[derive(Debug)]
+pub enum Const {
+    I64(i64),
+}
+
+#[derive(Debug)]
 pub struct FuncType {
     pub params: Vec<ValType>,
     pub results: Vec<ValType>,
@@ -21,8 +26,12 @@ pub struct Func {
 
 #[derive(Debug)]
 pub enum Instr {
+    Const(Const),
     GetLocal(u32),
-    Add(NumType),
+    Call(u32),
+    Drop,
+    AddI64,
+    SubI64,
     End,
 }
 
@@ -43,23 +52,35 @@ pub struct Export {
     pub desc: ExportDesc,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct TypeSection(pub Vec<FuncType>);
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct FuncSection(pub Vec<Func>);
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct ExportSection(pub Vec<Export>);
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct CodeSection(pub Vec<Code>);
 
+#[derive(Debug, Default)]
+pub struct StartSection(pub u32);
+
 #[derive(Debug)]
+pub enum Section {
+    Type(TypeSection),
+    Func(FuncSection),
+    Export(ExportSection),
+    Code(CodeSection),
+    Start(StartSection),
+}
+
+#[derive(Debug, Default)]
 pub struct Module {
-    pub types: Option<TypeSection>,
-    pub funcs: Option<FuncSection>,
-    pub exports: Option<ExportSection>,
-    pub start: Option<u32>,
-    pub code: Option<CodeSection>,
+    pub types: TypeSection,
+    pub funcs: FuncSection,
+    pub exports: ExportSection,
+    pub start: StartSection,
+    pub code: CodeSection,
 }
