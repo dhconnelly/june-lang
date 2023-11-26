@@ -25,6 +25,7 @@ pub trait ASTSpec {
     type ParamCargo: fmt::Debug + PartialEq + Eq + Clone;
     type FuncCargo: fmt::Debug + PartialEq + Eq + Clone;
     type LetCargo: fmt::Debug + PartialEq + Eq + Clone;
+    type BinaryCargo: fmt::Debug + PartialEq + Eq + Clone;
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -37,6 +38,7 @@ impl ASTSpec for UntypedAST {
     type ParamCargo = ();
     type FuncCargo = ();
     type LetCargo = ();
+    type BinaryCargo = ();
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -49,6 +51,7 @@ impl ASTSpec for TypedAST {
     type ParamCargo = Type;
     type FuncCargo = FnType;
     type LetCargo = Type;
+    type BinaryCargo = Type;
 }
 
 // =============================================================================
@@ -125,6 +128,28 @@ impl Typed for TypedIdent {
 }
 
 // =============================================================================
+// BinaryExpr
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum Op {
+    Add,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct Binary<AST: ASTSpec = UntypedAST> {
+    pub op: Op,
+    pub lhs: Box<Expr<AST>>,
+    pub rhs: Box<Expr<AST>>,
+    pub cargo: AST::BinaryCargo,
+}
+
+impl Typed for Binary<TypedAST> {
+    fn typ(&self) -> Type {
+        self.cargo.clone()
+    }
+}
+
+// =============================================================================
 // Expr
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -133,6 +158,7 @@ pub enum Expr<AST: ASTSpec = UntypedAST> {
     StrExpr(Literal<String>),
     IntExpr(Literal<i64>),
     CallExpr(Call<AST>),
+    BinaryExpr(Binary<AST>),
 }
 
 pub type TypedExpr = Expr<TypedAST>;
@@ -145,6 +171,7 @@ impl Typed for TypedExpr {
             StrExpr(expr) => expr.typ(),
             IntExpr(expr) => expr.typ(),
             CallExpr(expr) => expr.typ(),
+            BinaryExpr(expr) => expr.typ(),
         }
     }
 }

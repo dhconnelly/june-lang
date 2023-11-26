@@ -13,4 +13,5 @@ pub enum Token {
     Int(i64),
     LetTok,
     FnTok,
+    Plus,
 }

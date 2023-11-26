@@ -18,9 +18,21 @@ pub enum Error {
     InvalidCallable(Type),
     #[error("unknown type: {0}")]
     UnknownType(String),
+    #[error("invalid types for operator {op:?}: {lhs:?}, {rhs:?}")]
+    InvalidOpTypes { op: Op, lhs: Type, rhs: Type },
 }
 
 type Result<T> = result::Result<T, Error>;
+
+fn check_op(op: Op, lhs: Type, rhs: Type) -> Result<Type> {
+    use Op::*;
+    use Type::*;
+    match (op, &lhs, &rhs) {
+        (Add, Int, Int) => Ok(Int),
+        (Add, Str, Str) => Ok(Str),
+        _ => Err(Error::InvalidOpTypes { op, lhs, rhs }),
+    }
+}
 
 fn check((want, got): (&Type, &TypedExpr)) -> Result<()> {
     let got = got.typ();
@@ -54,6 +66,21 @@ impl Default for Analyzer {
 impl Analyzer {
     fn with_context(ctx: SymbolTable) -> Analyzer {
         Analyzer { ctx }
+    }
+
+    fn with_locals<S, T>(locals: T) -> Analyzer
+    where
+        S: ToString,
+        T: IntoIterator<Item = (S, Type)>,
+    {
+        let ctx = locals.into_iter().fold(
+            SymbolTable::default(),
+            |mut acc, (name, typ)| {
+                acc.def_local(name.to_string(), typ);
+                acc
+            },
+        );
+        Analyzer::with_context(ctx)
     }
 
     fn func(&mut self, f: Func) -> Result<TypedFunc> {
@@ -98,12 +125,21 @@ impl Analyzer {
         Ok(IdentExpr(Ident { name, resolution: cargo }))
     }
 
+    fn binary(&mut self, expr: Binary) -> Result<TypedExpr> {
+        let lhs = Box::new(self.expr(*expr.lhs)?);
+        let rhs = Box::new(self.expr(*expr.rhs)?);
+        let op = expr.op;
+        let cargo = check_op(op, lhs.typ(), rhs.typ())?;
+        Ok(Expr::BinaryExpr(Binary { op, lhs, rhs, cargo }))
+    }
+
     fn expr(&mut self, expr: Expr) -> Result<TypedExpr> {
         match expr {
             CallExpr(call) => Ok(CallExpr(self.call(call)?)),
             IntExpr(prim) => Ok(IntExpr(prim)),
             StrExpr(prim) => Ok(StrExpr(prim)),
             IdentExpr(prim) => self.ident(prim),
+            BinaryExpr(bin) => self.binary(bin),
         }
     }
 
@@ -414,6 +450,30 @@ mod test {
         };
         let func = parse(input).fn_expr().unwrap();
         let actual = Analyzer::with_context(ctx).func(func).unwrap();
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn test_binary() {
+        let input: Vec<(Analyzer, &[u8])> = vec![
+            (Analyzer::with_locals(vec![("x", Type::Int)]), b"x + 7"),
+            (Analyzer::with_locals(vec![("x", Type::Str)]), b"x + \"s\""),
+            (Analyzer::with_locals(vec![("x", Type::Str)]), b"x + 7"),
+        ];
+        let expected = vec![
+            Ok(Type::Int),
+            Ok(Type::Str),
+            Err(Error::InvalidOpTypes {
+                op: Op::Add,
+                lhs: Type::Str,
+                rhs: Type::Int,
+            }),
+        ];
+        let actual: Vec<Result<Type>> = input
+            .into_iter()
+            .map(|(mut a, s)| a.expr(parse(s).expr().unwrap()))
+            .map(|e| e.map(|te| te.typ()))
+            .collect();
         assert_eq!(expected, actual);
     }
 

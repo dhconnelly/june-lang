@@ -120,6 +120,7 @@ impl<R: io::BufRead> iter::Iterator for Scanner<R> {
         use Token::*;
         self.skip_whitespace();
         let result = self.peek()?.and_then(|b| match b {
+            b'+' => self.advance_emit(1, Plus),
             b'=' => self.advance_emit(1, Eq),
             b'(' => self.advance_emit(1, Lparen),
             b')' => self.advance_emit(1, Rparen),
