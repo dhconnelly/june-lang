@@ -1,3 +1,4 @@
+use crate::token::OpToken;
 use crate::types::{FnType, Resolution, Type, Typed};
 use std::fmt;
 
@@ -64,8 +65,8 @@ pub struct Call<AST: ASTSpec = UntypedAST> {
     pub resolved_type: AST::CallCargo,
 }
 
-impl Call<UntypedAST> {
-    pub fn untyped(target: Expr, args: Vec<Expr>) -> Call<UntypedAST> {
+impl Call {
+    pub fn untyped(target: Expr, args: Vec<Expr>) -> Call {
         Call { target: Box::new(target), args, resolved_type: () }
     }
 }
@@ -113,8 +114,8 @@ pub struct Ident<AST: ASTSpec = UntypedAST> {
     pub resolution: AST::IdentCargo,
 }
 
-impl Ident<UntypedAST> {
-    pub fn untyped<S: Into<String>>(name: S) -> Ident<UntypedAST> {
+impl Ident {
+    pub fn untyped<S: Into<String>>(name: S) -> Ident {
         Ident { name: name.into(), resolution: () }
     }
 }
@@ -133,6 +134,20 @@ impl Typed for TypedIdent {
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Op {
     Add,
+    Sub,
+    Mul,
+    Div,
+}
+
+impl From<OpToken> for Op {
+    fn from(value: OpToken) -> Self {
+        match value {
+            OpToken::Plus => Op::Add,
+            OpToken::Minus => Op::Sub,
+            OpToken::Star => Op::Mul,
+            OpToken::Slash => Op::Div,
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -141,6 +156,12 @@ pub struct Binary<AST: ASTSpec = UntypedAST> {
     pub lhs: Box<Expr<AST>>,
     pub rhs: Box<Expr<AST>>,
     pub cargo: AST::BinaryCargo,
+}
+
+impl Binary {
+    pub fn untyped(op: Op, lhs: Expr, rhs: Expr) -> Binary {
+        Binary { op, lhs: Box::new(lhs), rhs: Box::new(rhs), cargo: () }
+    }
 }
 
 impl Typed for Binary<TypedAST> {
@@ -201,11 +222,8 @@ pub struct Param<AST: ASTSpec = UntypedAST> {
     pub resolved_type: AST::ParamCargo,
 }
 
-impl Param<UntypedAST> {
-    pub fn untyped<S: Into<String>>(
-        name: S,
-        typ: TypeSpec,
-    ) -> Param<UntypedAST> {
+impl Param {
+    pub fn untyped<S: Into<String>>(name: S, typ: TypeSpec) -> Param {
         Param { name: name.into(), typ, resolved_type: () }
     }
 }
@@ -274,13 +292,13 @@ pub struct Func<AST: ASTSpec = UntypedAST> {
     pub resolved_type: AST::FuncCargo,
 }
 
-impl Func<UntypedAST> {
+impl Func {
     pub fn untyped<S: Into<String>>(
         name: S,
         params: Vec<Param>,
         body: Block,
         ret: TypeSpec,
-    ) -> Func<UntypedAST> {
+    ) -> Func {
         Func { name: name.into(), params, body, ret, resolved_type: () }
     }
 }

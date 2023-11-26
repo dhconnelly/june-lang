@@ -1,3 +1,12 @@
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum OpToken {
+    Plus,
+    Minus,
+    Star,
+    Slash,
+}
+
+// TODO: stop importing * everywhere and make the names sane
 #[derive(Debug, PartialEq, Clone)]
 pub enum Token {
     Lparen,
@@ -13,5 +22,5 @@ pub enum Token {
     Int(i64),
     LetTok,
     FnTok,
-    Plus,
+    OpTok(OpToken),
 }

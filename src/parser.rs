@@ -1,7 +1,7 @@
 // TODO: write BNF grammar
 use crate::ast::{Def::*, Expr::*, Stmt::*, *};
 use crate::scanner;
-use crate::token::{Token, Token::*};
+use crate::token::{OpToken::*, Token::*, *};
 use std::io;
 use std::iter;
 use std::result;
@@ -32,15 +32,15 @@ impl<R: io::BufRead> Parser<R> {
         self.scanner.peek().is_none()
     }
 
-    fn eat<T, F: FnMut(&Token) -> Option<T>>(
+    fn eat<T, F: FnMut(&Token) -> Option<T>, S: ToString>(
         &mut self,
         mut f: F,
-        want: String,
+        want: S,
     ) -> Result<T> {
         let got = self.scanner.next().ok_or(Error::UnexpectedEOF)??;
         match f(&got) {
             Some(t) => Ok(t),
-            None => Err(Error::Invalid { want, got }),
+            None => Err(Error::Invalid { want: want.to_string(), got }),
         }
     }
 
@@ -55,6 +55,13 @@ impl<R: io::BufRead> Parser<R> {
         self.eat(
             |tok| if let IdentTok(s) = tok { Some(s.clone()) } else { None },
             String::from("ident"),
+        )
+    }
+
+    fn eat_op(&mut self) -> Result<OpToken> {
+        self.eat(
+            |tok| if let OpTok(op) = tok { Some(*op) } else { None },
+            "op",
         )
     }
 
@@ -73,7 +80,7 @@ impl<R: io::BufRead> Parser<R> {
     }
 
     fn primary(&mut self) -> Result<Expr> {
-        let prim = match self.scanner.next().ok_or(Error::UnexpectedEOF)?? {
+        match self.scanner.next().ok_or(Error::UnexpectedEOF)?? {
             Str(value) => Ok(StrExpr(Literal::new(value))),
             Int(value) => Ok(IntExpr(Literal::new(value))),
             IdentTok(name) => Ok(IdentExpr(Ident { name, resolution: () })),
@@ -83,15 +90,43 @@ impl<R: io::BufRead> Parser<R> {
                 Ok(expr)
             }
             got => Err(Error::Invalid { want: String::from("prim"), got }),
-        }?;
+        }
+    }
+
+    fn call(&mut self) -> Result<Expr> {
+        let target = self.primary()?;
         if let Some(Ok(Lparen)) = self.scanner.peek() {
             self.eat_tok(Lparen)?;
             let args = self.list(|p| p.expr())?;
             self.eat_tok(Rparen)?;
-            Ok(CallExpr(Call::untyped(prim, args)))
+            Ok(CallExpr(Call::untyped(target, args)))
         } else {
-            Ok(prim)
+            Ok(target)
         }
+    }
+
+    fn mul_div(&mut self) -> Result<Expr> {
+        let mut expr = self.call()?;
+        while matches!(self.scanner.peek(), Some(Ok(OpTok(Star | Slash)))) {
+            let op = self.eat_op()?;
+            expr = BinaryExpr(Binary::untyped(op.into(), expr, self.call()?));
+        }
+        Ok(expr)
+    }
+
+    fn add_sub(&mut self) -> Result<Expr> {
+        // TODO: unify this with |mul_div| and |list|
+        let mut expr = self.mul_div()?;
+        while matches!(self.scanner.peek(), Some(Ok(OpTok(Plus | Minus)))) {
+            let op = self.eat_op()?;
+            expr =
+                BinaryExpr(Binary::untyped(op.into(), expr, self.mul_div()?));
+        }
+        Ok(expr)
+    }
+
+    pub fn expr(&mut self) -> Result<Expr> {
+        self.add_sub()
     }
 
     fn type_spec(&mut self) -> Result<TypeSpec> {
@@ -141,10 +176,6 @@ impl<R: io::BufRead> Parser<R> {
         Ok(Param::untyped(name, typ))
     }
 
-    pub fn expr(&mut self) -> Result<Expr> {
-        self.primary()
-    }
-
     pub fn fn_expr(&mut self) -> Result<Func> {
         self.eat_tok(FnTok)?;
         let name = self.eat_ident()?;
@@ -176,6 +207,7 @@ pub fn parse<R: io::BufRead>(scanner: scanner::Scanner<R>) -> Result<Program> {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::ast::Op::*;
 
     fn parse(input: &[u8]) -> Parser<&[u8]> {
         Parser { scanner: scanner::scan(input).peekable() }
@@ -269,6 +301,52 @@ mod test {
             resolved_type: (),
         });
         let actual = parse(input).let_stmt().unwrap();
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn test_binary() {
+        let input = b"x + y + (5 + 4) + foo(7, 10) + z + ((a + b) + c)";
+        let expected = BinaryExpr(Binary::untyped(
+            Op::Add,
+            BinaryExpr(Binary::untyped(
+                Add,
+                BinaryExpr(Binary::untyped(
+                    Add,
+                    BinaryExpr(Binary::untyped(
+                        Add,
+                        BinaryExpr(Binary::untyped(
+                            Add,
+                            IdentExpr(Ident::untyped("x")),
+                            IdentExpr(Ident::untyped("y")),
+                        )),
+                        BinaryExpr(Binary::untyped(
+                            Add,
+                            IntExpr(Literal::new(5)),
+                            IntExpr(Literal::new(4)),
+                        )),
+                    )),
+                    CallExpr(Call::untyped(
+                        IdentExpr(Ident::untyped("foo")),
+                        vec![
+                            IntExpr(Literal::new(7)),
+                            IntExpr(Literal::new(10)),
+                        ],
+                    )),
+                )),
+                IdentExpr(Ident::untyped("z")),
+            )),
+            BinaryExpr(Binary::untyped(
+                Add,
+                BinaryExpr(Binary::untyped(
+                    Add,
+                    IdentExpr(Ident::untyped("a")),
+                    IdentExpr(Ident::untyped("b")),
+                )),
+                IdentExpr(Ident::untyped("c")),
+            )),
+        ));
+        let actual = parse(input).expr().unwrap();
         assert_eq!(expected, actual);
     }
 

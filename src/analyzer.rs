@@ -68,21 +68,6 @@ impl Analyzer {
         Analyzer { ctx }
     }
 
-    fn with_locals<S, T>(locals: T) -> Analyzer
-    where
-        S: ToString,
-        T: IntoIterator<Item = (S, Type)>,
-    {
-        let ctx = locals.into_iter().fold(
-            SymbolTable::default(),
-            |mut acc, (name, typ)| {
-                acc.def_local(name.to_string(), typ);
-                acc
-            },
-        );
-        Analyzer::with_context(ctx)
-    }
-
     fn func(&mut self, f: Func) -> Result<TypedFunc> {
         // TODO: look for return statements when we handle return types
         self.ctx.push_frame();
@@ -211,6 +196,17 @@ mod test {
 
     fn parse(input: &[u8]) -> parser::Parser<&[u8]> {
         parser::Parser::new(scanner::scan(input))
+    }
+
+    fn with_locals<S: ToString, T: IntoIterator<Item = (S, Type)>>(
+        locals: T,
+    ) -> Analyzer {
+        let mut ctx = SymbolTable::default();
+        ctx.push_frame();
+        locals
+            .into_iter()
+            .for_each(|(name, typ)| ctx.def_local(name.to_string(), typ));
+        Analyzer::with_context(ctx)
     }
 
     #[test]
@@ -456,11 +452,15 @@ mod test {
     #[test]
     fn test_binary() {
         let input: Vec<(Analyzer, &[u8])> = vec![
-            (Analyzer::with_locals(vec![("x", Type::Int)]), b"x + 7"),
-            (Analyzer::with_locals(vec![("x", Type::Str)]), b"x + \"s\""),
-            (Analyzer::with_locals(vec![("x", Type::Str)]), b"x + 7"),
+            (Analyzer::default(), b"14 + 7"),
+            (Analyzer::default(), b"\"a\" + \"b\""),
+            (with_locals(vec![("x", Type::Int)]), b"x + 7"),
+            (with_locals(vec![("x", Type::Str)]), b"x + \"s\""),
+            (with_locals(vec![("x", Type::Str)]), b"x + 7"),
         ];
         let expected = vec![
+            Ok(Type::Int),
+            Ok(Type::Str),
             Ok(Type::Int),
             Ok(Type::Str),
             Err(Error::InvalidOpTypes {
