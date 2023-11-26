@@ -10,19 +10,21 @@ built-ins for string processing, garbage collection):
 - [x] scanner
 - [x] parser
 - [x] analyzer
+- [x] emit minimal wasm binary
+- [ ] translator
 - [ ] emitter
-- [ ] serializer
-- [ ] end-to-end testing
+- [ ] strings
+- [ ] generic external print function
 - [ ] garbage collection
 
 add features:
 
-- [ ] recursion and mutual recursion
-- [ ] forward references for globals
 - [ ] return types
-- [ ] assignment
 - [ ] conditionals
 - [ ] loops
+- [ ] assignment
+- [ ] recursion and mutual recursion
+- [ ] forward references for globals
 - [ ] structs
 - [ ] vecs
 - [ ] maps
@@ -35,6 +37,8 @@ refactoring:
 - [x] static func type in ast
 - [ ] just one From<io::Error> in scanner
 - [ ] add back (line, col) tracking
+- [ ] better peek
+- [ ] better tokens
 - [ ] nice error reporting
 - [ ] improve the algebra
 - [ ] simplify the awful functions
@@ -83,7 +87,6 @@ what I think is necessary to solve Advent of Code puzzles.
 Dependencies:
 
 - [Rust](https://www.rust-lang.org/) (only if building from source)
-- [wasmtime](https://wasmtime.dev/) to run compiled programs
 
 To build from source:
 
@@ -101,8 +104,8 @@ To use a pre-built release:
 
 ## Usage
 
-    junec FILE
-    wasmtime FILE.wasm
+    junec examples/hello.june
+    junevm examples/hello.wasm
 
 For more usage information, run `junec --help`. For examples, see `examples/`.
 
@@ -112,7 +115,6 @@ For more details on wasm, wasi, and wasmtime:
 
 -   [WebAssembly Specification](https://webassembly.github.io/spec/core/)
 -   [Wasmtime documentation](https://docs.wasmtime.dev/)
--   [WASI Document Guide](https://github.com/bytecodealliance/wasmtime/blob/main/docs/WASI-documents.md)
 
 This is my eighth hobby language implementation. Here are the previous ones:
 

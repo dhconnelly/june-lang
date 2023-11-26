@@ -3,6 +3,5 @@ fn foo(x: int) {
 }
 
 fn main() {
-    foo(5);
-    foo(27);
+    foo(5 + 7);
 }
