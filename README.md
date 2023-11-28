@@ -37,7 +37,8 @@ built-ins for string processing, garbage collection):
 - [x] scanner
 - [x] parser
 - [x] analyzer and type checker
-- [x] emitter (int-only)
+- [x] emitter
+- [x] emit and execute a hand-translated ast
 - [x] wasmtime vm embedding w/external print
 - [ ] translator
 - [ ] add strings
