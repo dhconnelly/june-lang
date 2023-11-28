@@ -1,55 +1,6 @@
 # june-lang
 
-a small statically-typed language that runs on [wasm](https://webassembly.org/)
-
-## TODO
-
-end-to-end for basic programs (i.e. functions, local variables, strings, basic
-built-ins for string processing, garbage collection):
-
-- [x] scanner
-- [x] parser
-- [x] analyzer
-- [x] emit minimal wasm binary
-- [ ] translator
-- [ ] emitter
-- [ ] strings
-- [ ] generic external print function
-- [ ] garbage collection
-
-add features:
-
-- [ ] return types
-- [ ] conditionals
-- [ ] loops
-- [ ] assignment
-- [ ] recursion and mutual recursion
-- [ ] forward references for globals
-- [ ] structs
-- [ ] vecs
-- [ ] maps
-- [ ] sets
-- [ ] file i/o
-
-refactoring:
-
-- [ ] avoid copies in ast
-- [x] static func type in ast
-- [ ] just one From<io::Error> in scanner
-- [ ] add back (line, col) tracking
-- [ ] better peek
-- [ ] better tokens
-- [ ] nice error reporting
-- [ ] improve the algebra
-- [ ] simplify the awful functions
-- [ ] narrow public interface
-- [ ] nicer main.rs w/structopt
-- [ ] read and apply https://thume.ca/2019/04/18/writing-a-compiler-in-rust/
-
-productionization:
-
-- [ ] skim relevant parts of engineering a compiler
-- [ ] skim relevant parts of types and programming languages
+a small statically-typed (work-in-progress) language that runs on [wasm](https://webassembly.org/)
 
 ## Purpose
 
@@ -73,14 +24,63 @@ what I think is necessary to solve Advent of Code puzzles.
 ## Non-features
 
 - first-class functions
-- subtyping
+- subtyping, interfaces
 - generics for user-defined types
 - algebraic data types
 - concurrency
 
-## Example
+## TODO
 
-    TODO
+end-to-end for basic programs (i.e. functions, local variables, strings, basic
+built-ins for string processing, garbage collection):
+
+- [x] scanner
+- [x] parser
+- [x] analyzer and type checker
+- [x] emitter (int-only)
+- [x] wasmtime vm embedding w/external print
+- [ ] translator
+- [ ] add strings
+- [ ] generic print
+- [ ] garbage collection
+
+add features:
+
+- [ ] return types
+- [ ] conditionals
+- [ ] loops
+- [ ] assignment
+- [ ] recursion and mutual recursion
+- [ ] forward references for globals
+- [ ] structs
+- [ ] vecs
+- [ ] maps
+- [ ] sets
+- [ ] file i/o
+
+refactoring:
+
+- [x] static func type in ast
+- [ ] avoid copies in ast
+- [ ] just one From<io::Error> in scanner
+- [ ] add back (line, col) tracking
+- [ ] better peek
+- [ ] better tokens
+- [ ] nice error reporting
+- [ ] improve the algebra
+- [ ] simplify the awful functions
+- [ ] narrow public interface
+- [ ] nicer main.rs w/structopt
+- [ ] read and apply https://thume.ca/2019/04/18/writing-a-compiler-in-rust/
+
+productionization:
+
+- [ ] skim relevant parts of engineering a compiler
+- [ ] skim relevant parts of types and programming languages
+
+## Examples
+
+See the `examples` directory.
 
 ## Installation
 
@@ -88,7 +88,7 @@ Dependencies:
 
 - [Rust](https://www.rust-lang.org/) (only if building from source)
 
-To build from source:
+To build and install from source:
 
     git clone git@github.com:dhconnelly/june-lang.git
     cargo test
@@ -96,7 +96,7 @@ To build from source:
 
 To install from crates.io:
 
-    cargo install june-lang
+    TODO
 
 To use a pre-built release:
 
