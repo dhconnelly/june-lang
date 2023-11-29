@@ -11,7 +11,8 @@ what I think is necessary to solve Advent of Code puzzles.
 
 ## Features
 
-- builds binaries that can be executed by [wasmtime](https://wasmtime.dev)
+- supports ahead-of-time compilation to wasm binary format
+- embeds wasmtime for jit compilation of wasm binaries
 - static typing: programs are checked during compilation
 - basic types: int, float, bool, string
 - the usual arithmetic and logical operators, loops, conditionals

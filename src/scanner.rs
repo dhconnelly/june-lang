@@ -1,12 +1,11 @@
-use crate::token::{OpToken::*, *};
+use crate::token::{OpToken, Token};
 use std::io;
 use std::iter;
-use std::num;
 use std::result;
 use std::string;
 use thiserror::Error;
 
-#[derive(Error, Debug, Clone)]
+#[derive(Error, Debug, Clone, PartialEq)]
 pub enum Error {
     #[error("io: {0}")]
     IOError(String),
@@ -19,18 +18,11 @@ pub enum Error {
     #[error("unknown token: {0}")]
     UnknownToken(u8),
     #[error("invalid int: {0}")]
-    IntError(#[from] num::ParseIntError),
+    IntError(String),
 }
 
 impl From<&io::Error> for Error {
     fn from(err: &io::Error) -> Error {
-        Error::IOError(format!("{}", err))
-    }
-}
-
-// TODO: figure out how to combine this with the ref implementation
-impl From<io::Error> for Error {
-    fn from(err: io::Error) -> Error {
         Error::IOError(format!("{}", err))
     }
 }
@@ -45,33 +37,19 @@ fn is_delim(b: u8) -> bool {
     !b.is_ascii_alphanumeric() && b != b'_'
 }
 
-fn ident_type(s: &str) -> Token {
-    use Token::*;
-    match s {
-        "fn" => FnTok,
-        "let" => LetTok,
-        _ => IdentTok(String::from(s)),
-    }
-}
-
 impl<R: io::BufRead> Scanner<R> {
     fn peek(&mut self) -> Option<Result<u8>> {
-        Some(self.bytes.peek()?.as_ref().map_err(Error::from).cloned())
+        let peeked = self.bytes.peek()?;
+        let result = peeked.as_ref().map_err(Error::from).map(|ch| *ch);
+        Some(result)
     }
 
     fn advance(&mut self) -> Result<u8> {
-        Ok(self.bytes.next().ok_or(Error::UnexpectedEOF)??)
+        let result = self.bytes.next().ok_or(Error::UnexpectedEOF)?;
+        result.map_err(|err| (&err).into())
     }
 
-    fn eat(&mut self, want: u8, typ: &str) -> Result<u8> {
-        if self.advance()? == want {
-            Ok(want)
-        } else {
-            Err(Error::InvalidToken(String::from(typ)))
-        }
-    }
-
-    fn advance_while<F: Fn(u8) -> bool>(&mut self, f: F) -> Result<String> {
+    fn advance_while(&mut self, f: impl Fn(u8) -> bool) -> Result<String> {
         let mut buf = Vec::new();
         while let Some(value) = self.peek() {
             if !f(value?) {
@@ -82,28 +60,42 @@ impl<R: io::BufRead> Scanner<R> {
         Ok(String::from_utf8(buf)?)
     }
 
-    fn advance_emit(&mut self, size: usize, typ: Token) -> Result<Token> {
-        for _ in 0..size {
-            self.advance()?;
+    fn eat(&mut self, got: &[u8], want: impl ToString) -> Result<()> {
+        for ch in got {
+            if self.peek() != Some(Ok(*ch)) {
+                return Err(Error::InvalidToken(want.to_string()));
+            }
+            self.advance().unwrap();
         }
-        Ok(typ)
+        Ok(())
+    }
+
+    fn eat_as(&mut self, s: &[u8], tok: Token) -> Result<Token> {
+        self.eat(s, &tok)?;
+        Ok(tok)
     }
 
     fn str(&mut self) -> Result<Token> {
-        self.eat(b'"', "str")?;
+        self.eat(b"\"", "Str")?;
         let text = self.advance_while(|b| b != b'"')?;
-        self.eat(b'"', "str")?;
+        self.eat(b"\"", "Str")?;
         Ok(Token::Str(text))
     }
 
     fn int(&mut self) -> Result<Token> {
         let text = self.advance_while(|b| !is_delim(b))?;
-        Ok(Token::Int(text.parse::<i64>()?))
+        let int = text.parse::<i64>().map_err(|_| Error::IntError(text))?;
+        Ok(Token::Int(int))
     }
 
     fn keyword_or_ident(&mut self) -> Result<Token> {
         let text = self.advance_while(|b| !is_delim(b))?;
-        Ok(ident_type(&text))
+        let tok = match text.as_str() {
+            "fn" => Token::FnTok,
+            "let" => Token::LetTok,
+            _ => Token::IdentTok(text),
+        };
+        Ok(tok)
     }
 
     fn skip_whitespace(&mut self) {
@@ -117,18 +109,17 @@ impl<R: io::BufRead> iter::Iterator for Scanner<R> {
     type Item = result::Result<Token, Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        use Token::*;
         self.skip_whitespace();
         let result = self.peek()?.and_then(|b| match b {
-            b'+' => self.advance_emit(1, OpTok(Plus)),
-            b'=' => self.advance_emit(1, Eq),
-            b'(' => self.advance_emit(1, Lparen),
-            b')' => self.advance_emit(1, Rparen),
-            b'{' => self.advance_emit(1, Lbrace),
-            b'}' => self.advance_emit(1, Rbrace),
-            b',' => self.advance_emit(1, Comma),
-            b';' => self.advance_emit(1, Semi),
-            b':' => self.advance_emit(1, Colon),
+            b'+' => self.eat_as(b"+", Token::OpTok(OpToken::Plus)),
+            b'=' => self.eat_as(b"=", Token::Eq),
+            b'(' => self.eat_as(b"(", Token::Lparen),
+            b')' => self.eat_as(b")", Token::Rparen),
+            b'{' => self.eat_as(b"{", Token::Lbrace),
+            b'}' => self.eat_as(b"}", Token::Rbrace),
+            b',' => self.eat_as(b",", Token::Comma),
+            b';' => self.eat_as(b";", Token::Semi),
+            b':' => self.eat_as(b":", Token::Colon),
             b'"' => self.str(),
             b if b.is_ascii_digit() => self.int(),
             b if b.is_ascii_alphabetic() => self.keyword_or_ident(),
