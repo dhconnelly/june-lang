@@ -6,7 +6,6 @@ pub enum Op {
     Slash,
 }
 
-// TODO: stop importing * everywhere and make the names sane
 #[derive(Debug, PartialEq, Clone)]
 pub enum Token {
     Lparen,
@@ -23,6 +22,24 @@ pub enum Token {
     Let,
     Fn,
     Op(Op),
+}
+
+impl Token {
+    pub fn as_op(&self) -> Option<Op> {
+        if let Token::Op(op) = self {
+            Some(*op)
+        } else {
+            None
+        }
+    }
+
+    pub fn as_ident(&self) -> Option<String> {
+        if let Token::Ident(name) = self {
+            Some(name.to_owned())
+        } else {
+            None
+        }
+    }
 }
 
 impl std::fmt::Display for Token {

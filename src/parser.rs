@@ -32,11 +32,14 @@ impl<R: io::BufRead> Parser<R> {
         self.scanner.peek().is_none()
     }
 
-    fn eat<T, F: FnMut(&Token) -> Option<T>, S: ToString>(
-        &mut self,
-        mut f: F,
-        want: S,
-    ) -> Result<T> {
+    fn peek_is(&mut self, f: impl Fn(&Token) -> bool) -> bool {
+        matches!(self.scanner.peek(), Some(Ok(tok)) if f(tok))
+    }
+
+    fn eat<T, Eat>(&mut self, f: Eat, want: impl ToString) -> Result<T>
+    where
+        Eat: Fn(&Token) -> Option<T>,
+    {
         let got = self.scanner.next().ok_or(Error::UnexpectedEOF)??;
         match f(&got) {
             Some(t) => Ok(t),
@@ -45,53 +48,18 @@ impl<R: io::BufRead> Parser<R> {
     }
 
     fn eat_tok(&mut self, want: Token) -> Result<()> {
-        self.eat(
-            |tok| if tok == &want { Some(()) } else { None },
-            format!("{:?}", want),
-        )
+        self.eat(|tok| if tok == &want { Some(()) } else { None }, &want)
     }
 
     fn eat_ident(&mut self) -> Result<String> {
-        self.eat(
-            |tok| {
-                if let Token::Ident(s) = tok {
-                    Some(s.clone())
-                } else {
-                    None
-                }
-            },
-            String::from("ident"),
-        )
-    }
-
-    fn eat_op(&mut self) -> Result<Op> {
-        self.eat(
-            |tok| if let Token::Op(op) = tok { Some(*op) } else { None },
-            "op",
-        )
-    }
-
-    fn list<T, F: FnMut(&mut Self) -> Result<T>>(
-        &mut self,
-        mut f: F,
-    ) -> Result<Vec<T>> {
-        let mut list = Vec::new();
-        while !matches!(self.scanner.peek(), Some(Ok(Token::Rparen))) {
-            if !list.is_empty() {
-                self.eat_tok(Token::Comma)?;
-            }
-            list.push(f(self)?);
-        }
-        Ok(list)
+        self.eat(|tok| tok.as_ident(), "ident")
     }
 
     fn primary(&mut self) -> Result<Expr> {
         match self.scanner.next().ok_or(Error::UnexpectedEOF)?? {
             Token::Str(value) => Ok(Expr::Str(Literal::new(value))),
             Token::Int(value) => Ok(Expr::Int(Literal::new(value))),
-            Token::Ident(name) => {
-                Ok(Expr::Ident(Ident { name, resolution: () }))
-            }
+            Token::Ident(name) => Ok(Expr::Ident(Ident::untyped(name))),
             Token::Lparen => {
                 let expr = self.expr()?;
                 self.eat_tok(Token::Rparen)?;
@@ -103,7 +71,7 @@ impl<R: io::BufRead> Parser<R> {
 
     fn call(&mut self) -> Result<Expr> {
         let target = self.primary()?;
-        if let Some(Ok(Token::Lparen)) = self.scanner.peek() {
+        if self.peek_is(|tok| tok == &Token::Lparen) {
             self.eat_tok(Token::Lparen)?;
             let args = self.list(|p| p.expr())?;
             self.eat_tok(Token::Rparen)?;
@@ -113,30 +81,39 @@ impl<R: io::BufRead> Parser<R> {
         }
     }
 
-    fn mul_div(&mut self) -> Result<Expr> {
+    fn list<T, Eat>(&mut self, eat: Eat) -> Result<Vec<T>>
+    where
+        Eat: Fn(&mut Self) -> Result<T>,
+    {
+        let mut list = Vec::new();
+        while !self.peek_is(|tok| tok == &Token::Rparen) {
+            if !list.is_empty() {
+                self.eat_tok(Token::Comma)?;
+            }
+            list.push(eat(self)?);
+        }
+        Ok(list)
+    }
+
+    fn binary<Pred, Eat>(&mut self, pred: Pred, eat: Eat) -> Result<Expr>
+    where
+        Pred: Fn(&Op) -> bool,
+        Eat: Fn(&mut Self) -> Result<Expr>,
+    {
         let mut expr = self.call()?;
-        while matches!(
-            self.scanner.peek(),
-            Some(Ok(Token::Op(Op::Star | Op::Slash)))
-        ) {
-            let op = self.eat_op()?;
-            expr = Expr::Binary(Binary::untyped(op.into(), expr, self.call()?));
+        while self.peek_is(|tok| matches!(tok, Token::Op(op) if pred(op))) {
+            let op = self.eat(|tok| tok.as_op(), "op")?;
+            expr = Expr::Binary(Binary::untyped(op.into(), expr, eat(self)?));
         }
         Ok(expr)
     }
 
+    fn mul_div(&mut self) -> Result<Expr> {
+        self.binary(|op| matches!(op, Op::Star | Op::Slash), |p| p.call())
+    }
+
     fn add_sub(&mut self) -> Result<Expr> {
-        // TODO: unify this with |mul_div| and |list|
-        let mut expr = self.mul_div()?;
-        while matches!(
-            self.scanner.peek(),
-            Some(Ok(Token::Op(Op::Plus | Op::Minus)))
-        ) {
-            let op = self.eat_op()?;
-            expr =
-                Expr::Binary(Binary::untyped(op.into(), expr, self.mul_div()?));
-        }
-        Ok(expr)
+        self.binary(|op| matches!(op, Op::Plus | Op::Minus), |p| p.mul_div())
     }
 
     pub fn expr(&mut self) -> Result<Expr> {
@@ -162,7 +139,7 @@ impl<R: io::BufRead> Parser<R> {
         self.eat_tok(Token::Eq)?;
         let expr = self.expr()?;
         self.eat_tok(Token::Semi)?;
-        Ok(Stmt::Let(Binding { name, typ, expr, resolved_type: () }))
+        Ok(Stmt::Let(Binding::new(name, typ, expr, ())))
     }
 
     pub fn stmt(&mut self) -> Result<Stmt> {
@@ -176,7 +153,7 @@ impl<R: io::BufRead> Parser<R> {
     pub fn block(&mut self) -> Result<Block> {
         self.eat_tok(Token::Lbrace)?;
         let mut stmts = Vec::new();
-        while !matches!(self.scanner.peek(), Some(Ok(Token::Rbrace))) {
+        while !self.peek_is(|tok| tok == &Token::Rbrace) {
             stmts.push(self.stmt()?);
         }
         self.eat_tok(Token::Rbrace)?;
