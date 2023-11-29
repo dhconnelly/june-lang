@@ -115,8 +115,8 @@ pub struct Ident<AST: ASTSpec = UntypedAST> {
 }
 
 impl Ident {
-    pub fn untyped<S: Into<String>>(name: S) -> Ident {
-        Ident { name: name.into(), resolution: () }
+    pub fn untyped<S: ToString>(name: S) -> Ident {
+        Ident { name: name.to_string(), resolution: () }
     }
 }
 
@@ -207,8 +207,8 @@ pub enum TypeSpec {
 }
 
 impl TypeSpec {
-    pub fn simple<S: Into<String>>(s: S) -> TypeSpec {
-        TypeSpec::Simple(s.into())
+    pub fn simple<S: ToString>(s: S) -> TypeSpec {
+        TypeSpec::Simple(s.to_string())
     }
 }
 
@@ -223,8 +223,8 @@ pub struct Param<AST: ASTSpec = UntypedAST> {
 }
 
 impl Param {
-    pub fn untyped<S: Into<String>>(name: S, typ: TypeSpec) -> Param {
-        Param { name: name.into(), typ, resolved_type: () }
+    pub fn untyped<S: ToString>(name: S, typ: TypeSpec) -> Param {
+        Param { name: name.to_string(), typ, resolved_type: () }
     }
 }
 
@@ -293,13 +293,13 @@ pub struct Func<AST: ASTSpec = UntypedAST> {
 }
 
 impl Func {
-    pub fn untyped<S: Into<String>>(
+    pub fn untyped<S: ToString>(
         name: S,
         params: Vec<Param>,
         body: Block,
         ret: TypeSpec,
     ) -> Func {
-        Func { name: name.into(), params, body, ret, resolved_type: () }
+        Func { name: name.to_string(), params, body, ret, resolved_type: () }
     }
 }
 

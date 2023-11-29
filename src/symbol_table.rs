@@ -1,13 +1,12 @@
 use crate::types::*;
 use std::collections::HashMap;
 
-#[derive(Debug, Clone)]
 struct SymbolInfo {
     idx: usize,
     typ: Type,
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Default)]
 pub struct SymbolTable {
     // TODO: supporting forward references will require supporting empty values
     // in the globals table
@@ -16,9 +15,9 @@ pub struct SymbolTable {
 }
 
 impl SymbolTable {
-    pub fn def_global<S: Into<String>>(&mut self, name: S, typ: Type) {
+    pub fn def_global(&mut self, name: impl ToString, typ: Type) {
         let idx = self.globals.len();
-        let name = name.into();
+        let name = name.to_string();
         self.globals.insert(name, SymbolInfo { idx, typ });
     }
 
@@ -37,10 +36,10 @@ impl SymbolTable {
         self.frames.pop().unwrap();
     }
 
-    pub fn def_local<S: Into<String>>(&mut self, name: S, typ: Type) {
+    pub fn def_local(&mut self, name: impl ToString, typ: Type) {
         let frame = self.frames.last_mut().unwrap();
         let idx = frame.len();
-        frame.insert(name.into(), SymbolInfo { idx, typ });
+        frame.insert(name.to_string(), SymbolInfo { idx, typ });
     }
 
     fn get_frame(&self, name: &str, depth: usize) -> Option<Resolution> {
