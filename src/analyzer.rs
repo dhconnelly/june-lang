@@ -68,20 +68,32 @@ impl Analyzer {
         Analyzer { ctx }
     }
 
+    fn all<T, U, F>(&mut self, ts: Vec<T>, f: F) -> Result<Vec<U>>
+    where
+        F: Fn(&mut Self, T) -> Result<U>,
+    {
+        ts.into_iter().map(|t| f(self, t)).collect::<Result<_>>()
+    }
+
+    fn param(&mut self, param: Param) -> Result<TypedParam> {
+        let (name, typ) = (param.name, param.typ);
+        let resolved_type = self.resolve_type(&typ)?;
+        Ok(Param { name, typ, resolved_type })
+    }
+
     fn func(&mut self, f: Func) -> Result<TypedFunc> {
-        // TODO: look for return statements when we handle return types
+        let params = self.all(f.params, |a, param| a.param(param))?;
         self.ctx.push_frame();
-        let (mut param_types, mut params) = (Vec::new(), Vec::new());
-        for param in f.params {
-            let (name, typ) = (param.name, param.typ);
-            let resolved_type = self.typ(&typ)?;
-            self.ctx.def_local(name.clone(), resolved_type.clone());
-            param_types.push(resolved_type.clone());
-            params.push(Param { name, typ, resolved_type });
+        for param in &params {
+            self.ctx.def_local(&param.name, param.resolved_type.clone());
         }
         let body = self.block(f.body)?;
-        let ret = Box::new(self.typ(&f.ret)?);
-        let resolved_type = FnType { params: param_types, ret };
+        let ret = self.resolve_type(&f.ret)?;
+        // TODO: look for return statements when we handle return types
+        let resolved_type = FnType {
+            params: params.iter().map(|p| p.typ()).collect(),
+            ret: Box::new(ret),
+        };
         let func =
             Func { name: f.name, params, body, ret: f.ret, resolved_type };
         self.ctx.pop_frame();
@@ -91,11 +103,7 @@ impl Analyzer {
     fn call(&mut self, call: Call) -> Result<TypedCall> {
         let target = Box::new(self.expr(*call.target)?);
         if let Type::Fn(f) = target.typ() {
-            let args = call
-                .args
-                .into_iter()
-                .map(|e| self.expr(e))
-                .collect::<Result<Vec<TypedExpr>>>()?;
+            let args = self.all(call.args, |a, arg| a.expr(arg))?;
             check_all(&f.params, &args)?;
             Ok(Call { target, args, resolved_type: *f.ret })
         } else {
@@ -105,9 +113,9 @@ impl Analyzer {
 
     fn ident(&mut self, ident: Ident) -> Result<TypedExpr> {
         let name = ident.name;
-        let cargo =
+        let resolution =
             self.ctx.get(&name).ok_or(Error::Undefined(name.clone()))?;
-        Ok(Expr::Ident(Ident { name, resolution: cargo }))
+        Ok(Expr::Ident(Ident { name, resolution }))
     }
 
     fn binary(&mut self, expr: Binary) -> Result<TypedExpr> {
@@ -128,7 +136,7 @@ impl Analyzer {
         }
     }
 
-    fn typ(&self, typ: &TypeSpec) -> Result<Type> {
+    fn resolve_type(&self, typ: &TypeSpec) -> Result<Type> {
         // TODO: handle more complex types
         match typ {
             TypeSpec::Void => Ok(Type::Void),
@@ -139,10 +147,10 @@ impl Analyzer {
     }
 
     fn let_stmt(&mut self, stmt: Binding) -> Result<TypedStmt> {
-        let typ = self.typ(&stmt.typ)?;
+        let typ = self.resolve_type(&stmt.typ)?;
         let expr = self.expr(stmt.expr)?;
         check((&typ, &expr))?;
-        self.ctx.def_local(stmt.name.clone(), typ.clone());
+        self.ctx.def_local(&stmt.name, typ.clone());
         Ok(Stmt::Let(Binding::new(stmt.name, stmt.typ, expr, typ)))
     }
 
@@ -156,10 +164,7 @@ impl Analyzer {
 
     fn block(&mut self, Block(stmts): Block) -> Result<TypedBlock> {
         self.ctx.push_frame();
-        let stmts = stmts
-            .into_iter()
-            .map(|stmt| self.stmt(stmt))
-            .collect::<Result<_>>()?;
+        let stmts = self.all(stmts, |a, stmt| a.stmt(stmt))?;
         self.ctx.pop_frame();
         Ok(Block(stmts))
     }
@@ -168,18 +173,15 @@ impl Analyzer {
         match def {
             Def::FnDef(f) => {
                 let func = self.func(f)?;
-                self.ctx.def_global(
-                    func.name.clone(),
-                    Type::Fn(func.resolved_type.clone()),
-                );
+                let typ = func.resolved_type.clone();
+                self.ctx.def_global(&func.name, Type::Fn(typ));
                 Ok(Def::FnDef(func))
             }
         }
     }
 
     fn program(&mut self, Program { defs }: Program) -> Result<TypedProgram> {
-        let defs =
-            defs.into_iter().map(|def| self.def(def)).collect::<Result<_>>()?;
+        let defs = self.all(defs, |a, def| a.def(def))?;
         Ok(Program { defs })
     }
 }
