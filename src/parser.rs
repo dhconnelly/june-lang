@@ -1,7 +1,7 @@
 // TODO: write BNF grammar
-use crate::ast::{Def::*, Expr::*, Stmt::*, *};
+use crate::ast::*;
 use crate::scanner;
-use crate::token::{OpToken::*, Token::*, *};
+use crate::token::*;
 use std::io;
 use std::iter;
 use std::result;
@@ -53,14 +53,20 @@ impl<R: io::BufRead> Parser<R> {
 
     fn eat_ident(&mut self) -> Result<String> {
         self.eat(
-            |tok| if let IdentTok(s) = tok { Some(s.clone()) } else { None },
+            |tok| {
+                if let Token::Ident(s) = tok {
+                    Some(s.clone())
+                } else {
+                    None
+                }
+            },
             String::from("ident"),
         )
     }
 
-    fn eat_op(&mut self) -> Result<OpToken> {
+    fn eat_op(&mut self) -> Result<Op> {
         self.eat(
-            |tok| if let OpTok(op) = tok { Some(*op) } else { None },
+            |tok| if let Token::Op(op) = tok { Some(*op) } else { None },
             "op",
         )
     }
@@ -70,9 +76,9 @@ impl<R: io::BufRead> Parser<R> {
         mut f: F,
     ) -> Result<Vec<T>> {
         let mut list = Vec::new();
-        while !matches!(self.scanner.peek(), Some(Ok(Rparen))) {
+        while !matches!(self.scanner.peek(), Some(Ok(Token::Rparen))) {
             if !list.is_empty() {
-                self.eat_tok(Comma)?;
+                self.eat_tok(Token::Comma)?;
             }
             list.push(f(self)?);
         }
@@ -81,12 +87,14 @@ impl<R: io::BufRead> Parser<R> {
 
     fn primary(&mut self) -> Result<Expr> {
         match self.scanner.next().ok_or(Error::UnexpectedEOF)?? {
-            Str(value) => Ok(StrExpr(Literal::new(value))),
-            Int(value) => Ok(IntExpr(Literal::new(value))),
-            IdentTok(name) => Ok(IdentExpr(Ident { name, resolution: () })),
-            Lparen => {
+            Token::Str(value) => Ok(Expr::Str(Literal::new(value))),
+            Token::Int(value) => Ok(Expr::Int(Literal::new(value))),
+            Token::Ident(name) => {
+                Ok(Expr::Ident(Ident { name, resolution: () }))
+            }
+            Token::Lparen => {
                 let expr = self.expr()?;
-                self.eat_tok(Rparen)?;
+                self.eat_tok(Token::Rparen)?;
                 Ok(expr)
             }
             got => Err(Error::Invalid { want: String::from("prim"), got }),
@@ -95,11 +103,11 @@ impl<R: io::BufRead> Parser<R> {
 
     fn call(&mut self) -> Result<Expr> {
         let target = self.primary()?;
-        if let Some(Ok(Lparen)) = self.scanner.peek() {
-            self.eat_tok(Lparen)?;
+        if let Some(Ok(Token::Lparen)) = self.scanner.peek() {
+            self.eat_tok(Token::Lparen)?;
             let args = self.list(|p| p.expr())?;
-            self.eat_tok(Rparen)?;
-            Ok(CallExpr(Call::untyped(target, args)))
+            self.eat_tok(Token::Rparen)?;
+            Ok(Expr::Call(Call::untyped(target, args)))
         } else {
             Ok(target)
         }
@@ -107,9 +115,12 @@ impl<R: io::BufRead> Parser<R> {
 
     fn mul_div(&mut self) -> Result<Expr> {
         let mut expr = self.call()?;
-        while matches!(self.scanner.peek(), Some(Ok(OpTok(Star | Slash)))) {
+        while matches!(
+            self.scanner.peek(),
+            Some(Ok(Token::Op(Op::Star | Op::Slash)))
+        ) {
             let op = self.eat_op()?;
-            expr = BinaryExpr(Binary::untyped(op.into(), expr, self.call()?));
+            expr = Expr::Binary(Binary::untyped(op.into(), expr, self.call()?));
         }
         Ok(expr)
     }
@@ -117,10 +128,13 @@ impl<R: io::BufRead> Parser<R> {
     fn add_sub(&mut self) -> Result<Expr> {
         // TODO: unify this with |mul_div| and |list|
         let mut expr = self.mul_div()?;
-        while matches!(self.scanner.peek(), Some(Ok(OpTok(Plus | Minus)))) {
+        while matches!(
+            self.scanner.peek(),
+            Some(Ok(Token::Op(Op::Plus | Op::Minus)))
+        ) {
             let op = self.eat_op()?;
             expr =
-                BinaryExpr(Binary::untyped(op.into(), expr, self.mul_div()?));
+                Expr::Binary(Binary::untyped(op.into(), expr, self.mul_div()?));
         }
         Ok(expr)
     }
@@ -136,59 +150,59 @@ impl<R: io::BufRead> Parser<R> {
 
     fn expr_stmt(&mut self) -> Result<Stmt> {
         let expr = self.expr()?;
-        self.eat_tok(Semi)?;
-        Ok(ExprStmt(expr))
+        self.eat_tok(Token::Semi)?;
+        Ok(Stmt::Expr(expr))
     }
 
     fn let_stmt(&mut self) -> Result<Stmt> {
-        self.eat_tok(LetTok)?;
+        self.eat_tok(Token::Let)?;
         let name = self.eat_ident()?;
-        self.eat_tok(Colon)?;
+        self.eat_tok(Token::Colon)?;
         let typ = self.type_spec()?;
-        self.eat_tok(Eq)?;
+        self.eat_tok(Token::Eq)?;
         let expr = self.expr()?;
-        self.eat_tok(Semi)?;
-        Ok(LetStmt(Binding { name, typ, expr, resolved_type: () }))
+        self.eat_tok(Token::Semi)?;
+        Ok(Stmt::Let(Binding { name, typ, expr, resolved_type: () }))
     }
 
     pub fn stmt(&mut self) -> Result<Stmt> {
         match self.scanner.peek() {
-            Some(Ok(LetTok)) => self.let_stmt(),
-            Some(Ok(Lbrace)) => Ok(BlockStmt(self.block()?)),
+            Some(Ok(Token::Let)) => self.let_stmt(),
+            Some(Ok(Token::Lbrace)) => Ok(Stmt::Block(self.block()?)),
             _ => self.expr_stmt(),
         }
     }
 
     pub fn block(&mut self) -> Result<Block> {
-        self.eat_tok(Lbrace)?;
+        self.eat_tok(Token::Lbrace)?;
         let mut stmts = Vec::new();
-        while !matches!(self.scanner.peek(), Some(Ok(Rbrace))) {
+        while !matches!(self.scanner.peek(), Some(Ok(Token::Rbrace))) {
             stmts.push(self.stmt()?);
         }
-        self.eat_tok(Rbrace)?;
+        self.eat_tok(Token::Rbrace)?;
         Ok(Block(stmts))
     }
 
     fn param(&mut self) -> Result<Param> {
         let name = self.eat_ident()?;
-        self.eat_tok(Colon)?;
+        self.eat_tok(Token::Colon)?;
         let typ = self.type_spec()?;
         Ok(Param::untyped(name, typ))
     }
 
     pub fn fn_expr(&mut self) -> Result<Func> {
-        self.eat_tok(FnTok)?;
+        self.eat_tok(Token::Fn)?;
         let name = self.eat_ident()?;
-        self.eat_tok(Lparen)?;
+        self.eat_tok(Token::Lparen)?;
         let params = self.list(|p| p.param())?;
-        self.eat_tok(Rparen)?;
+        self.eat_tok(Token::Rparen)?;
         // TODO: parse return type
         let body = self.block()?;
         Ok(Func::untyped(name, params, body, TypeSpec::Void))
     }
 
     pub fn def(&mut self) -> Result<Def> {
-        Ok(FnDef(self.fn_expr()?))
+        Ok(Def::FnDef(self.fn_expr()?))
     }
 
     pub fn program(&mut self) -> Result<Program> {
@@ -207,7 +221,7 @@ pub fn parse<R: io::BufRead>(scanner: scanner::Scanner<R>) -> Result<Program> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::ast::Op::*;
+    use crate::ast::BinaryOp::*;
 
     fn parse(input: &[u8]) -> Parser<&[u8]> {
         Parser { scanner: scanner::scan(input).peekable() }
@@ -226,10 +240,10 @@ mod test {
     fn test_primary() {
         let input = b"foo bar 27 \"hello, world\"";
         let expected = vec![
-            IdentExpr(Ident::untyped("foo")),
-            IdentExpr(Ident::untyped("bar")),
-            IntExpr(Literal::new(27)),
-            StrExpr(Literal::new("hello, world")),
+            Expr::Ident(Ident::untyped("foo")),
+            Expr::Ident(Ident::untyped("bar")),
+            Expr::Int(Literal::new(27)),
+            Expr::Str(Literal::new("hello, world")),
         ];
         let mut p = parse(input);
         let mut actual = Vec::new();
@@ -247,17 +261,20 @@ mod test {
             b" println ( \"foo\" , 27 ) ".as_slice(),
         ];
         let expected = vec![
-            CallExpr(Call::untyped(
-                IdentExpr(Ident::untyped("foo")),
+            Expr::Call(Call::untyped(
+                Expr::Ident(Ident::untyped("foo")),
                 Vec::new(),
             )),
-            CallExpr(Call::untyped(
-                IdentExpr(Ident::untyped("bar")),
-                vec![IdentExpr(Ident::untyped("arg"))],
+            Expr::Call(Call::untyped(
+                Expr::Ident(Ident::untyped("bar")),
+                vec![Expr::Ident(Ident::untyped("arg"))],
             )),
-            CallExpr(Call::untyped(
-                IdentExpr(Ident::untyped("println")),
-                vec![StrExpr(Literal::new("foo")), IntExpr(Literal::new(27))],
+            Expr::Call(Call::untyped(
+                Expr::Ident(Ident::untyped("println")),
+                vec![
+                    Expr::Str(Literal::new("foo")),
+                    Expr::Int(Literal::new(27)),
+                ],
             )),
         ];
         let actual: Vec<Expr> =
@@ -272,10 +289,10 @@ mod test {
             foo(bar);
         }";
         let expected = Block(vec![
-            ExprStmt(IntExpr(Literal::new(27))),
-            ExprStmt(CallExpr(Call::untyped(
-                IdentExpr(Ident::untyped("foo")),
-                vec![IdentExpr(Ident::untyped("bar"))],
+            Stmt::Expr(Expr::Int(Literal::new(27))),
+            Stmt::Expr(Expr::Call(Call::untyped(
+                Expr::Ident(Ident::untyped("foo")),
+                vec![Expr::Ident(Ident::untyped("bar"))],
             ))),
         ]);
         let actual = parse(input).block().unwrap();
@@ -294,10 +311,10 @@ mod test {
     #[test]
     fn test_let() {
         let input = b"let foo: int = 7;";
-        let expected = LetStmt(Binding {
+        let expected = Stmt::Let(Binding {
             name: String::from("foo"),
             typ: TypeSpec::Simple(String::from("int")),
-            expr: IntExpr(Literal::new(7)),
+            expr: Expr::Int(Literal::new(7)),
             resolved_type: (),
         });
         let actual = parse(input).let_stmt().unwrap();
@@ -307,43 +324,43 @@ mod test {
     #[test]
     fn test_binary() {
         let input = b"x + y + (5 + 4) + foo(7, 10) + z + ((a + b) + c)";
-        let expected = BinaryExpr(Binary::untyped(
-            Op::Add,
-            BinaryExpr(Binary::untyped(
+        let expected = Expr::Binary(Binary::untyped(
+            BinaryOp::Add,
+            Expr::Binary(Binary::untyped(
                 Add,
-                BinaryExpr(Binary::untyped(
+                Expr::Binary(Binary::untyped(
                     Add,
-                    BinaryExpr(Binary::untyped(
+                    Expr::Binary(Binary::untyped(
                         Add,
-                        BinaryExpr(Binary::untyped(
+                        Expr::Binary(Binary::untyped(
                             Add,
-                            IdentExpr(Ident::untyped("x")),
-                            IdentExpr(Ident::untyped("y")),
+                            Expr::Ident(Ident::untyped("x")),
+                            Expr::Ident(Ident::untyped("y")),
                         )),
-                        BinaryExpr(Binary::untyped(
+                        Expr::Binary(Binary::untyped(
                             Add,
-                            IntExpr(Literal::new(5)),
-                            IntExpr(Literal::new(4)),
+                            Expr::Int(Literal::new(5)),
+                            Expr::Int(Literal::new(4)),
                         )),
                     )),
-                    CallExpr(Call::untyped(
-                        IdentExpr(Ident::untyped("foo")),
+                    Expr::Call(Call::untyped(
+                        Expr::Ident(Ident::untyped("foo")),
                         vec![
-                            IntExpr(Literal::new(7)),
-                            IntExpr(Literal::new(10)),
+                            Expr::Int(Literal::new(7)),
+                            Expr::Int(Literal::new(10)),
                         ],
                     )),
                 )),
-                IdentExpr(Ident::untyped("z")),
+                Expr::Ident(Ident::untyped("z")),
             )),
-            BinaryExpr(Binary::untyped(
+            Expr::Binary(Binary::untyped(
                 Add,
-                BinaryExpr(Binary::untyped(
+                Expr::Binary(Binary::untyped(
                     Add,
-                    IdentExpr(Ident::untyped("a")),
-                    IdentExpr(Ident::untyped("b")),
+                    Expr::Ident(Ident::untyped("a")),
+                    Expr::Ident(Ident::untyped("b")),
                 )),
-                IdentExpr(Ident::untyped("c")),
+                Expr::Ident(Ident::untyped("c")),
             )),
         ));
         let actual = parse(input).expr().unwrap();
@@ -359,9 +376,9 @@ mod test {
                 Param::untyped("world", TypeSpec::Simple(String::from("int"))),
                 Param::untyped("all", TypeSpec::Simple(String::from("str"))),
             ],
-            Block(vec![ExprStmt(CallExpr(Call::untyped(
-                IdentExpr(Ident::untyped("foo")),
-                vec![IntExpr(Literal::new(27))],
+            Block(vec![Stmt::Expr(Expr::Call(Call::untyped(
+                Expr::Ident(Ident::untyped("foo")),
+                vec![Expr::Int(Literal::new(27))],
             )))]),
             TypeSpec::Void,
         );
@@ -396,11 +413,11 @@ mod test {
                             TypeSpec::Simple(String::from("int")),
                         ),
                     ],
-                    Block(vec![ExprStmt(Expr::CallExpr(Call::untyped(
-                        IdentExpr(Ident::untyped("println")),
+                    Block(vec![Stmt::Expr(Expr::Call(Call::untyped(
+                        Expr::Ident(Ident::untyped("println")),
                         vec![
-                            IdentExpr(Ident::untyped("s")),
-                            IdentExpr(Ident::untyped("t")),
+                            Expr::Ident(Ident::untyped("s")),
+                            Expr::Ident(Ident::untyped("t")),
                         ],
                     )))]),
                     TypeSpec::Void,
@@ -408,9 +425,9 @@ mod test {
                 Def::FnDef(Func::untyped(
                     "main",
                     vec![],
-                    Block(vec![ExprStmt(Expr::CallExpr(Call::untyped(
-                        IdentExpr(Ident::untyped("foo")),
-                        vec![StrExpr(Literal::new("hello, world"))],
+                    Block(vec![Stmt::Expr(Expr::Call(Call::untyped(
+                        Expr::Ident(Ident::untyped("foo")),
+                        vec![Expr::Str(Literal::new("hello, world"))],
                     )))]),
                     TypeSpec::Void,
                 )),

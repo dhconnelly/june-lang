@@ -1,5 +1,5 @@
 // TODO: write failure test cases
-use crate::ast::{Def::*, Expr::*, Stmt::*, *};
+use crate::ast::*;
 use crate::builtins;
 use crate::symbol_table::*;
 use crate::types::*;
@@ -19,13 +19,13 @@ pub enum Error {
     #[error("unknown type: {0}")]
     UnknownType(String),
     #[error("invalid types for operator {op:?}: {lhs:?}, {rhs:?}")]
-    InvalidOpTypes { op: Op, lhs: Type, rhs: Type },
+    InvalidOpTypes { op: BinaryOp, lhs: Type, rhs: Type },
 }
 
 type Result<T> = result::Result<T, Error>;
 
-fn check_op(op: Op, lhs: Type, rhs: Type) -> Result<Type> {
-    use Op::*;
+fn check_op(op: BinaryOp, lhs: Type, rhs: Type) -> Result<Type> {
+    use BinaryOp::*;
     use Type::*;
     match (op, &lhs, &rhs) {
         (Add, Int, Int) => Ok(Int),
@@ -107,7 +107,7 @@ impl Analyzer {
         let name = ident.name;
         let cargo =
             self.ctx.get(&name).ok_or(Error::Undefined(name.clone()))?;
-        Ok(IdentExpr(Ident { name, resolution: cargo }))
+        Ok(Expr::Ident(Ident { name, resolution: cargo }))
     }
 
     fn binary(&mut self, expr: Binary) -> Result<TypedExpr> {
@@ -115,16 +115,16 @@ impl Analyzer {
         let rhs = Box::new(self.expr(*expr.rhs)?);
         let op = expr.op;
         let cargo = check_op(op, lhs.typ(), rhs.typ())?;
-        Ok(Expr::BinaryExpr(Binary { op, lhs, rhs, cargo }))
+        Ok(Expr::Binary(Binary { op, lhs, rhs, cargo }))
     }
 
     fn expr(&mut self, expr: Expr) -> Result<TypedExpr> {
         match expr {
-            CallExpr(call) => Ok(CallExpr(self.call(call)?)),
-            IntExpr(prim) => Ok(IntExpr(prim)),
-            StrExpr(prim) => Ok(StrExpr(prim)),
-            IdentExpr(prim) => self.ident(prim),
-            BinaryExpr(bin) => self.binary(bin),
+            Expr::Call(call) => Ok(Expr::Call(self.call(call)?)),
+            Expr::Int(prim) => Ok(Expr::Int(prim)),
+            Expr::Str(prim) => Ok(Expr::Str(prim)),
+            Expr::Ident(prim) => self.ident(prim),
+            Expr::Binary(bin) => self.binary(bin),
         }
     }
 
@@ -143,14 +143,14 @@ impl Analyzer {
         let expr = self.expr(stmt.expr)?;
         check((&typ, &expr))?;
         self.ctx.def_local(stmt.name.clone(), typ.clone());
-        Ok(LetStmt(Binding::new(stmt.name, stmt.typ, expr, typ)))
+        Ok(Stmt::Let(Binding::new(stmt.name, stmt.typ, expr, typ)))
     }
 
     fn stmt(&mut self, stmt: Stmt) -> Result<TypedStmt> {
         match stmt {
-            ExprStmt(expr) => Ok(ExprStmt(self.expr(expr)?)),
-            LetStmt(stmt) => self.let_stmt(stmt),
-            BlockStmt(block) => Ok(BlockStmt(self.block(block)?)),
+            Stmt::Expr(expr) => Ok(Stmt::Expr(self.expr(expr)?)),
+            Stmt::Let(stmt) => self.let_stmt(stmt),
+            Stmt::Block(block) => Ok(Stmt::Block(self.block(block)?)),
         }
     }
 
@@ -166,13 +166,13 @@ impl Analyzer {
 
     fn def(&mut self, def: Def) -> Result<TypedDef> {
         match def {
-            FnDef(f) => {
+            Def::FnDef(f) => {
                 let func = self.func(f)?;
                 self.ctx.def_global(
                     func.name.clone(),
                     Type::Fn(func.resolved_type.clone()),
                 );
-                Ok(FnDef(func))
+                Ok(Def::FnDef(func))
             }
         }
     }
@@ -231,8 +231,8 @@ mod test {
                         resolved_type: Type::Str,
                     }],
                     ret: TypeSpec::Void,
-                    body: Block(vec![ExprStmt(CallExpr(Call {
-                        target: Box::new(IdentExpr(Ident {
+                    body: Block(vec![Stmt::Expr(Expr::Call(Call {
+                        target: Box::new(Expr::Ident(Ident {
                             name: String::from("println"),
                             resolution: Resolution {
                                 reference: Reference::Global { idx: 0 },
@@ -242,7 +242,7 @@ mod test {
                                 }),
                             },
                         })),
-                        args: vec![IdentExpr(Ident {
+                        args: vec![Expr::Ident(Ident {
                             name: String::from("name"),
                             resolution: Resolution {
                                 reference: Reference::Stack {
@@ -263,8 +263,8 @@ mod test {
                     name: String::from("main"),
                     params: vec![],
                     ret: TypeSpec::Void,
-                    body: Block(vec![ExprStmt(CallExpr(Call {
-                        target: Box::new(IdentExpr(Ident {
+                    body: Block(vec![Stmt::Expr(Expr::Call(Call {
+                        target: Box::new(Expr::Ident(Ident {
                             name: String::from("greet"),
                             resolution: Resolution {
                                 reference: Reference::Global { idx: 1 },
@@ -274,7 +274,7 @@ mod test {
                                 }),
                             },
                         })),
-                        args: vec![StrExpr(Literal::new("the pope"))],
+                        args: vec![Expr::Str(Literal::new("the pope"))],
                         resolved_type: Type::Void,
                     }))]),
                     resolved_type: FnType {
@@ -344,11 +344,11 @@ mod test {
             ],
             ret: TypeSpec::Void,
             body: Block(vec![
-                LetStmt(Binding {
+                Stmt::Let(Binding {
                     name: String::from("age_str"),
                     typ: TypeSpec::simple("str"),
-                    expr: CallExpr(Call {
-                        target: Box::new(IdentExpr(Ident {
+                    expr: Expr::Call(Call {
+                        target: Box::new(Expr::Ident(Ident {
                             name: String::from("itoa"),
                             resolution: Resolution {
                                 reference: Reference::Global { idx: 0 },
@@ -358,7 +358,7 @@ mod test {
                                 }),
                             },
                         })),
-                        args: vec![IdentExpr(Ident {
+                        args: vec![Expr::Ident(Ident {
                             name: String::from("age"),
                             resolution: Resolution {
                                 reference: Reference::Stack {
@@ -372,11 +372,11 @@ mod test {
                     }),
                     resolved_type: Type::Str,
                 }),
-                LetStmt(Binding {
+                Stmt::Let(Binding {
                     name: String::from("greeting"),
                     typ: TypeSpec::simple("str"),
-                    expr: CallExpr(Call {
-                        target: Box::new(IdentExpr(Ident {
+                    expr: Expr::Call(Call {
+                        target: Box::new(Expr::Ident(Ident {
                             name: String::from("join"),
                             resolution: Resolution {
                                 reference: Reference::Global { idx: 1 },
@@ -387,7 +387,7 @@ mod test {
                             },
                         })),
                         args: vec![
-                            IdentExpr(Ident {
+                            Expr::Ident(Ident {
                                 name: String::from("name"),
                                 resolution: Resolution {
                                     reference: Reference::Stack {
@@ -397,7 +397,7 @@ mod test {
                                     typ: Type::Str,
                                 },
                             }),
-                            IdentExpr(Ident {
+                            Expr::Ident(Ident {
                                 name: String::from("age_str"),
                                 resolution: Resolution {
                                     reference: Reference::Stack {
@@ -412,8 +412,8 @@ mod test {
                     }),
                     resolved_type: Type::Str,
                 }),
-                ExprStmt(CallExpr(Call {
-                    target: Box::new(IdentExpr(Ident {
+                Stmt::Expr(Expr::Call(Call {
+                    target: Box::new(Expr::Ident(Ident {
                         name: String::from("println"),
                         resolution: Resolution {
                             reference: Reference::Stack {
@@ -426,7 +426,7 @@ mod test {
                             }),
                         },
                     })),
-                    args: vec![IdentExpr(Ident {
+                    args: vec![Expr::Ident(Ident {
                         name: String::from("greeting"),
                         resolution: Resolution {
                             reference: Reference::Stack {
@@ -464,7 +464,7 @@ mod test {
             Ok(Type::Int),
             Ok(Type::Str),
             Err(Error::InvalidOpTypes {
-                op: Op::Add,
+                op: BinaryOp::Add,
                 lhs: Type::Str,
                 rhs: Type::Int,
             }),
@@ -494,16 +494,16 @@ mod test {
             y;
         }";
         let expected = Block(vec![
-            LetStmt(Binding {
+            Stmt::Let(Binding {
                 name: String::from("x"),
                 typ: TypeSpec::Simple(String::from("int")),
-                expr: IntExpr(Literal { value: 7 }),
+                expr: Expr::Int(Literal { value: 7 }),
                 resolved_type: Type::Int,
             }),
-            LetStmt(Binding {
+            Stmt::Let(Binding {
                 name: String::from("y"),
                 typ: TypeSpec::Simple(String::from("int")),
-                expr: IdentExpr(Ident {
+                expr: Expr::Ident(Ident {
                     name: String::from("x"),
                     resolution: Resolution {
                         typ: Type::Int,
@@ -515,11 +515,11 @@ mod test {
                 }),
                 resolved_type: Type::Int,
             }),
-            BlockStmt(Block(vec![
-                LetStmt(Binding {
+            Stmt::Block(Block(vec![
+                Stmt::Let(Binding {
                     name: String::from("z"),
                     typ: TypeSpec::Simple(String::from("int")),
-                    expr: IdentExpr(Ident {
+                    expr: Expr::Ident(Ident {
                         name: String::from("y"),
                         resolution: Resolution {
                             typ: Type::Int,
@@ -531,10 +531,10 @@ mod test {
                     }),
                     resolved_type: Type::Int,
                 }),
-                LetStmt(Binding {
+                Stmt::Let(Binding {
                     name: String::from("y"),
                     typ: TypeSpec::Simple(String::from("int")),
-                    expr: IdentExpr(Ident {
+                    expr: Expr::Ident(Ident {
                         name: String::from("x"),
                         resolution: Resolution {
                             typ: Type::Int,
@@ -546,10 +546,10 @@ mod test {
                     }),
                     resolved_type: Type::Int,
                 }),
-                LetStmt(Binding {
+                Stmt::Let(Binding {
                     name: String::from("w"),
                     typ: TypeSpec::Simple(String::from("int")),
-                    expr: IdentExpr(Ident {
+                    expr: Expr::Ident(Ident {
                         name: String::from("y"),
                         resolution: Resolution {
                             typ: Type::Int,
@@ -561,13 +561,13 @@ mod test {
                     }),
                     resolved_type: Type::Int,
                 }),
-                BlockStmt(Block(vec![LetStmt(Binding {
+                Stmt::Block(Block(vec![Stmt::Let(Binding {
                     name: String::from("x"),
                     typ: TypeSpec::Simple(String::from("int")),
-                    expr: IntExpr(Literal { value: 7 }),
+                    expr: Expr::Int(Literal { value: 7 }),
                     resolved_type: Type::Int,
                 })])),
-                ExprStmt(IdentExpr(Ident {
+                Stmt::Expr(Expr::Ident(Ident {
                     name: String::from("x"),
                     resolution: Resolution {
                         typ: Type::Int,
@@ -578,7 +578,7 @@ mod test {
                     },
                 })),
             ])),
-            ExprStmt(IdentExpr(Ident {
+            Stmt::Expr(Expr::Ident(Ident {
                 name: String::from("y"),
                 resolution: Resolution {
                     typ: Type::Int,

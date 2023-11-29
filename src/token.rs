@@ -1,5 +1,5 @@
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub enum OpToken {
+pub enum Op {
     Plus,
     Minus,
     Star,
@@ -18,11 +18,11 @@ pub enum Token {
     Colon,
     Eq,
     Str(String),
-    IdentTok(String),
+    Ident(String),
     Int(i64),
-    LetTok,
-    FnTok,
-    OpTok(OpToken),
+    Let,
+    Fn,
+    Op(Op),
 }
 
 impl std::fmt::Display for Token {

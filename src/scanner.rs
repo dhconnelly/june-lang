@@ -1,4 +1,4 @@
-use crate::token::{OpToken, Token};
+use crate::token::*;
 use std::io;
 use std::iter;
 use std::result;
@@ -91,9 +91,9 @@ impl<R: io::BufRead> Scanner<R> {
     fn keyword_or_ident(&mut self) -> Result<Token> {
         let text = self.advance_while(|b| !is_delim(b))?;
         let tok = match text.as_str() {
-            "fn" => Token::FnTok,
-            "let" => Token::LetTok,
-            _ => Token::IdentTok(text),
+            "fn" => Token::Fn,
+            "let" => Token::Let,
+            _ => Token::Ident(text),
         };
         Ok(tok)
     }
@@ -111,7 +111,7 @@ impl<R: io::BufRead> iter::Iterator for Scanner<R> {
     fn next(&mut self) -> Option<Self::Item> {
         self.skip_whitespace();
         let result = self.peek()?.and_then(|b| match b {
-            b'+' => self.eat_as(b"+", Token::OpTok(OpToken::Plus)),
+            b'+' => self.eat_as(b"+", Token::Op(Op::Plus)),
             b'=' => self.eat_as(b"=", Token::Eq),
             b'(' => self.eat_as(b"(", Token::Lparen),
             b')' => self.eat_as(b")", Token::Rparen),
@@ -163,19 +163,19 @@ mod tests {
         ";
         let toks = scan_all(input).unwrap();
         let expected = vec![
-            FnTok,
-            IdentTok(String::from("foo")),
+            Fn,
+            Ident(String::from("foo")),
             Lparen,
-            IdentTok(String::from("bar")),
+            Ident(String::from("bar")),
             Colon,
-            IdentTok(String::from("int")),
+            Ident(String::from("int")),
             Comma,
-            IdentTok(String::from("baz")),
+            Ident(String::from("baz")),
             Colon,
-            IdentTok(String::from("str")),
+            Ident(String::from("str")),
             Rparen,
             Lbrace,
-            IdentTok(String::from("println")),
+            Ident(String::from("println")),
             Lparen,
             Str(String::from("hello, world")),
             Comma,
@@ -183,10 +183,10 @@ mod tests {
             Rparen,
             Semi,
             Lbrace,
-            LetTok,
-            IdentTok(String::from("foo")),
+            Let,
+            Ident(String::from("foo")),
             Colon,
-            IdentTok(String::from("int")),
+            Ident(String::from("int")),
             Eq,
             Int(7),
             Semi,

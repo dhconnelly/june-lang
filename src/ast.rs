@@ -1,4 +1,4 @@
-use crate::token::OpToken;
+use crate::token::Op;
 use crate::types::{FnType, Resolution, Type, Typed};
 use std::fmt;
 
@@ -132,34 +132,34 @@ impl Typed for TypedIdent {
 // BinaryExpr
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub enum Op {
+pub enum BinaryOp {
     Add,
     Sub,
     Mul,
     Div,
 }
 
-impl From<OpToken> for Op {
-    fn from(value: OpToken) -> Self {
+impl From<Op> for BinaryOp {
+    fn from(value: Op) -> Self {
         match value {
-            OpToken::Plus => Op::Add,
-            OpToken::Minus => Op::Sub,
-            OpToken::Star => Op::Mul,
-            OpToken::Slash => Op::Div,
+            Op::Plus => BinaryOp::Add,
+            Op::Minus => BinaryOp::Sub,
+            Op::Star => BinaryOp::Mul,
+            Op::Slash => BinaryOp::Div,
         }
     }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Binary<AST: ASTSpec = UntypedAST> {
-    pub op: Op,
+    pub op: BinaryOp,
     pub lhs: Box<Expr<AST>>,
     pub rhs: Box<Expr<AST>>,
     pub cargo: AST::BinaryCargo,
 }
 
 impl Binary {
-    pub fn untyped(op: Op, lhs: Expr, rhs: Expr) -> Binary {
+    pub fn untyped(op: BinaryOp, lhs: Expr, rhs: Expr) -> Binary {
         Binary { op, lhs: Box::new(lhs), rhs: Box::new(rhs), cargo: () }
     }
 }
@@ -175,11 +175,11 @@ impl Typed for Binary<TypedAST> {
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Expr<AST: ASTSpec = UntypedAST> {
-    IdentExpr(Ident<AST>),
-    StrExpr(Literal<String>),
-    IntExpr(Literal<i64>),
-    CallExpr(Call<AST>),
-    BinaryExpr(Binary<AST>),
+    Ident(Ident<AST>),
+    Str(Literal<String>),
+    Int(Literal<i64>),
+    Call(Call<AST>),
+    Binary(Binary<AST>),
 }
 
 pub type TypedExpr = Expr<TypedAST>;
@@ -188,11 +188,11 @@ impl Typed for TypedExpr {
     fn typ(&self) -> Type {
         use Expr::*;
         match self {
-            IdentExpr(expr) => expr.typ(),
-            StrExpr(expr) => expr.typ(),
-            IntExpr(expr) => expr.typ(),
-            CallExpr(expr) => expr.typ(),
-            BinaryExpr(expr) => expr.typ(),
+            Ident(expr) => expr.typ(),
+            Str(expr) => expr.typ(),
+            Int(expr) => expr.typ(),
+            Call(expr) => expr.typ(),
+            Binary(expr) => expr.typ(),
         }
     }
 }
@@ -265,9 +265,9 @@ impl<AST: ASTSpec> Binding<AST> {
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Stmt<AST: ASTSpec = UntypedAST> {
-    ExprStmt(Expr<AST>),
-    BlockStmt(Block<AST>),
-    LetStmt(Binding<AST>),
+    Expr(Expr<AST>),
+    Block(Block<AST>),
+    Let(Binding<AST>),
 }
 
 pub type TypedStmt = Stmt<TypedAST>;
