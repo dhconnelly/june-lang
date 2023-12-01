@@ -8,7 +8,7 @@ pub enum ValType {
     NumType(NumType),
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Const {
     I64(i64),
 }
@@ -24,7 +24,7 @@ pub struct Func {
     pub typeidx: u32,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Instr {
     Const(Const),
     GetLocal(u32),

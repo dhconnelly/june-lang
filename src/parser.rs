@@ -131,15 +131,20 @@ impl<R: io::BufRead> Parser<R> {
         Ok(Stmt::Expr(expr))
     }
 
-    fn let_stmt(&mut self) -> Result<Stmt> {
-        self.eat_tok(Token::Let)?;
+    fn param(&mut self) -> Result<Param> {
         let name = self.eat_ident()?;
         self.eat_tok(Token::Colon)?;
         let typ = self.type_spec()?;
+        Ok(Param::untyped(name, typ))
+    }
+
+    fn let_stmt(&mut self) -> Result<Stmt> {
+        self.eat_tok(Token::Let)?;
+        let param = self.param()?;
         self.eat_tok(Token::Eq)?;
         let expr = self.expr()?;
         self.eat_tok(Token::Semi)?;
-        Ok(Stmt::Let(Binding::new(name, typ, expr, ())))
+        Ok(Stmt::Let(Binding::new(param.name, param.typ, expr, ())))
     }
 
     pub fn stmt(&mut self) -> Result<Stmt> {
@@ -158,13 +163,6 @@ impl<R: io::BufRead> Parser<R> {
         }
         self.eat_tok(Token::Rbrace)?;
         Ok(Block(stmts))
-    }
-
-    fn param(&mut self) -> Result<Param> {
-        let name = self.eat_ident()?;
-        self.eat_tok(Token::Colon)?;
-        let typ = self.type_spec()?;
-        Ok(Param::untyped(name, typ))
     }
 
     pub fn fn_expr(&mut self) -> Result<Func> {

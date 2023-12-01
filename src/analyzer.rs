@@ -20,6 +20,8 @@ pub enum Error {
     UnknownType(String),
     #[error("invalid types for operator {op:?}: {lhs:?}, {rhs:?}")]
     InvalidOpTypes { op: BinaryOp, lhs: Type, rhs: Type },
+    #[error("entrypoint `main` undefined")]
+    NoMain,
 }
 
 type Result<T> = result::Result<T, Error>;
@@ -51,14 +53,14 @@ fn check_all(want: &[Type], got: &[TypedExpr]) -> Result<()> {
     }
 }
 
-struct Analyzer {
+pub struct Analyzer {
     ctx: SymbolTable,
 }
 
 impl Default for Analyzer {
     fn default() -> Analyzer {
         let mut ctx = SymbolTable::default();
-        builtins::install(&mut ctx);
+        builtins::install_symbols(&mut ctx);
         Analyzer::with_context(ctx)
     }
 }
@@ -94,8 +96,7 @@ impl Analyzer {
             params: params.iter().map(|p| p.typ()).collect(),
             ret: Box::new(ret),
         };
-        let func =
-            Func { name: f.name, params, body, ret: f.ret, resolved_type };
+        let func = Func { name: f.name, params, body, ret: f.ret, resolved_type };
         self.ctx.pop_frame();
         Ok(func)
     }
@@ -126,7 +127,7 @@ impl Analyzer {
         Ok(Expr::Binary(Binary { op, lhs, rhs, cargo }))
     }
 
-    fn expr(&mut self, expr: Expr) -> Result<TypedExpr> {
+    pub fn expr(&mut self, expr: Expr) -> Result<TypedExpr> {
         match expr {
             Expr::Call(call) => Ok(Expr::Call(self.call(call)?)),
             Expr::Int(prim) => Ok(Expr::Int(prim)),
@@ -182,7 +183,11 @@ impl Analyzer {
 
     fn program(&mut self, Program { defs }: Program) -> Result<TypedProgram> {
         let defs = self.all(defs, |a, def| a.def(def))?;
-        Ok(Program { defs })
+        if defs.iter().any(|d| matches!(d, Def::FnDef(f) if &f.name == "main")) {
+            Ok(Program { defs })
+        } else {
+            Err(Error::NoMain)
+        }
     }
 }
 
@@ -289,10 +294,7 @@ mod test {
         let mut ctx = SymbolTable::default();
         ctx.def_global(
             "println",
-            Type::Fn(FnType {
-                params: vec![Type::Str],
-                ret: Box::new(Type::Void),
-            }),
+            Type::Fn(FnType { params: vec![Type::Str], ret: Box::new(Type::Void) }),
         );
         let actual = Analyzer::with_context(ctx).program(program).unwrap();
         assert_eq!(expected, actual);
@@ -303,10 +305,7 @@ mod test {
         let mut ctx = SymbolTable::default();
         ctx.def_global(
             "itoa",
-            Type::Fn(FnType {
-                params: vec![Type::Int],
-                ret: Box::new(Type::Str),
-            }),
+            Type::Fn(FnType { params: vec![Type::Int], ret: Box::new(Type::Str) }),
         );
         ctx.def_global(
             "join",
@@ -318,10 +317,7 @@ mod test {
         ctx.push_frame();
         ctx.def_local(
             "println",
-            Type::Fn(FnType {
-                params: vec![Type::Str],
-                ret: Box::new(Type::Void),
-            }),
+            Type::Fn(FnType { params: vec![Type::Str], ret: Box::new(Type::Void) }),
         );
         let input = b"
             fn greet(name: str, age: int) {
@@ -509,10 +505,7 @@ mod test {
                     name: String::from("x"),
                     resolution: Resolution {
                         typ: Type::Int,
-                        reference: Reference::Stack {
-                            frame_depth: 0,
-                            frame_idx: 0,
-                        },
+                        reference: Reference::Stack { frame_depth: 0, frame_idx: 0 },
                     },
                 }),
                 resolved_type: Type::Int,
@@ -573,10 +566,7 @@ mod test {
                     name: String::from("x"),
                     resolution: Resolution {
                         typ: Type::Int,
-                        reference: Reference::Stack {
-                            frame_depth: 1,
-                            frame_idx: 0,
-                        },
+                        reference: Reference::Stack { frame_depth: 1, frame_idx: 0 },
                     },
                 })),
             ])),
@@ -584,10 +574,7 @@ mod test {
                 name: String::from("y"),
                 resolution: Resolution {
                     typ: Type::Int,
-                    reference: Reference::Stack {
-                        frame_depth: 0,
-                        frame_idx: 1,
-                    },
+                    reference: Reference::Stack { frame_depth: 0, frame_idx: 1 },
                 },
             })),
         ]);
@@ -652,5 +639,13 @@ mod test {
         let expected = vec![Ok(Type::Int), Ok(Type::Str)];
         let actual = analyze_exprs(inputs, SymbolTable::default());
         assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn test_no_main() {
+        let input = b"fn foo() {}";
+        let ast = parse(input).program().unwrap();
+        let actual = analyze(ast);
+        assert_eq!(Err(Error::NoMain), actual);
     }
 }

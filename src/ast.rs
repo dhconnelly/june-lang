@@ -87,6 +87,9 @@ pub struct Literal<T: PartialEq + Eq + Clone> {
     pub value: T,
 }
 
+pub type IntLiteral = Literal<i64>;
+pub type StrLiteral = Literal<String>;
+
 impl<T: fmt::Debug + PartialEq + Eq + Clone> Literal<T> {
     pub fn new<U: Into<T>>(value: U) -> Literal<T> {
         Literal { value: value.into() }
@@ -158,6 +161,8 @@ pub struct Binary<AST: ASTSpec = UntypedAST> {
     pub cargo: AST::BinaryCargo,
 }
 
+pub type TypedBinary = Binary<TypedAST>;
+
 impl Binary {
     pub fn untyped(op: BinaryOp, lhs: Expr, rhs: Expr) -> Binary {
         Binary { op, lhs: Box::new(lhs), rhs: Box::new(rhs), cargo: () }
@@ -176,8 +181,8 @@ impl Typed for Binary<TypedAST> {
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Expr<AST: ASTSpec = UntypedAST> {
     Ident(Ident<AST>),
-    Str(Literal<String>),
-    Int(Literal<i64>),
+    Str(StrLiteral),
+    Int(IntLiteral),
     Call(Call<AST>),
     Binary(Binary<AST>),
 }
