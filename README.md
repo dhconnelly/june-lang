@@ -174,7 +174,7 @@ as well as garbage collection. This was a good (if short) learning experience.
 
 Before that I also did an internship on the Google Web Toolkit (a Java to
 JavaScript compiler) team, and spent most of an internship on the Google
-Sheets team working on J2ObjC, an Objective-C to JavaScript compiler.
+Sheets team working on J2ObjC, a Java-to-Objective-C compiler.
 
 ## License
 
