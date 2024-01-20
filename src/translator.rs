@@ -52,6 +52,28 @@ impl Translator {
         Ok(())
     }
 
+    fn call(
+        &self,
+        call: ast::TypedCall,
+        instrs: &mut Vec<wasm::Instr>,
+    ) -> Result<()> {
+        // TODO: encode these invariants in the call ast node
+        let fn_type = call
+            .target
+            .as_ident()
+            .expect("typed call target must be an ident")
+            .resolution
+            .typ
+            .as_fn()
+            .expect("typed call target must have fn type");
+        assert_eq!(call.args.len(), fn_type.params.len());
+        for arg in call.args {
+            self.expr(arg, instrs)?;
+        }
+        instrs.push(wasm::Instr::Call(fn_type.index as u32));
+        Ok(())
+    }
+
     fn expr(
         &self,
         expr: ast::TypedExpr,
@@ -60,6 +82,7 @@ impl Translator {
         match expr {
             ast::Expr::Int(int) => self.int_literal(int, instrs),
             ast::Expr::Binary(binary) => self.binary(binary, instrs),
+            ast::Expr::Call(call) => self.call(call, instrs),
             _ => todo!(),
         }
     }
@@ -80,7 +103,7 @@ impl Translator {
         Ok(())
     }
 
-    fn foo(&mut self) {
+    fn _foo(&mut self) {
         // add
         self.module.types.0.push(wasm::FuncType {
             params: vec![
@@ -130,40 +153,61 @@ pub fn translate(program: ast::TypedProgram) -> Result<wasm::Module> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::analyzer;
-    use crate::parser;
-    use crate::scanner;
+    use crate::types;
 
-    fn translate_prog(prog: &str) -> wasm::Module {
-        let toks = scanner::scan(prog.as_bytes());
-        let ast = parser::parse(toks).unwrap();
-        let typed_ast = analyzer::analyze(ast).unwrap();
-        Translator::empty().translate(typed_ast).unwrap()
-    }
-
-    fn translate_expr(expr: &str) -> Vec<wasm::Instr> {
-        let toks = scanner::scan(expr.as_bytes());
-        let ast = parser::Parser::new(toks).expr().unwrap();
-        let typed_ast = analyzer::Analyzer::default().expr(ast).unwrap();
+    fn translate_expr(expr: ast::TypedExpr) -> Vec<wasm::Instr> {
         let mut instrs = Vec::new();
-        Translator::empty().expr(typed_ast, &mut instrs).unwrap();
+        Translator::empty().expr(expr, &mut instrs).unwrap();
         instrs
     }
 
     #[test]
     fn test_int_literal() {
-        let instrs = translate_expr("247");
+        let instrs = translate_expr(ast::TypedExpr::Int(ast::Literal::new(247)));
         let expected = vec![wasm::Instr::Const(wasm::Const::I64(247))];
         assert_eq!(instrs, expected);
     }
 
     #[test]
     fn test_binary() {
-        let instrs = translate_expr("3 + 17");
+        let instrs = translate_expr(ast::TypedExpr::Binary(ast::TypedBinary {
+            op: ast::BinaryOp::Add,
+            lhs: Box::new(ast::TypedExpr::Int(ast::Literal::new(3))),
+            rhs: Box::new(ast::TypedExpr::Int(ast::Literal::new(16))),
+            cargo: types::Type::Int,
+        }));
         let expected = vec![
             wasm::Instr::Const(wasm::Const::I64(3)),
-            wasm::Instr::Const(wasm::Const::I64(17)),
+            wasm::Instr::Const(wasm::Const::I64(16)),
             wasm::Instr::AddI64,
+        ];
+        assert_eq!(instrs, expected);
+    }
+
+    #[test]
+    fn test_call() {
+        let instrs = translate_expr(ast::TypedExpr::Call(ast::TypedCall {
+            target: Box::new(ast::TypedExpr::Ident(ast::TypedIdent {
+                name: String::from("add"),
+                resolution: types::Resolution {
+                    typ: types::Type::Fn(types::FnType {
+                        index: 3,
+                        params: vec![types::Type::Int, types::Type::Int],
+                        ret: Box::new(types::Type::Int),
+                    }),
+                    reference: types::Reference::Global { idx: 17 },
+                },
+            })),
+            args: vec![
+                ast::TypedExpr::Int(ast::Literal::new(3)),
+                ast::TypedExpr::Int(ast::Literal::new(4)),
+            ],
+            resolved_type: types::Type::Int,
+        }));
+        let expected = vec![
+            wasm::Instr::Const(wasm::Const::I64(3)),
+            wasm::Instr::Const(wasm::Const::I64(4)),
+            wasm::Instr::Call(3),
         ];
         assert_eq!(instrs, expected);
     }

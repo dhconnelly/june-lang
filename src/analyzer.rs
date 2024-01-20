@@ -70,7 +70,7 @@ impl Analyzer {
         Analyzer { ctx }
     }
 
-    fn all<T, U, F>(&mut self, ts: Vec<T>, f: F) -> Result<Vec<U>>
+    fn try_map<T, U, F>(&mut self, ts: Vec<T>, f: F) -> Result<Vec<U>>
     where
         F: Fn(&mut Self, T) -> Result<U>,
     {
@@ -84,7 +84,7 @@ impl Analyzer {
     }
 
     fn func(&mut self, f: Func) -> Result<TypedFunc> {
-        let params = self.all(f.params, |a, param| a.param(param))?;
+        let params = self.try_map(f.params, |a, param| a.param(param))?;
         self.ctx.push_frame();
         for param in &params {
             self.ctx.def_local(&param.name, param.resolved_type.clone());
@@ -92,10 +92,8 @@ impl Analyzer {
         let body = self.block(f.body)?;
         let ret = self.resolve_type(&f.ret)?;
         // TODO: look for return statements when we handle return types
-        let resolved_type = FnType {
-            params: params.iter().map(|p| p.typ()).collect(),
-            ret: Box::new(ret),
-        };
+        let resolved_type =
+            self.ctx.def_fn(params.iter().map(|p| p.typ()).collect(), ret);
         let func = Func { name: f.name, params, body, ret: f.ret, resolved_type };
         self.ctx.pop_frame();
         Ok(func)
@@ -104,7 +102,7 @@ impl Analyzer {
     fn call(&mut self, call: Call) -> Result<TypedCall> {
         let target = Box::new(self.expr(*call.target)?);
         if let Type::Fn(f) = target.typ() {
-            let args = self.all(call.args, |a, arg| a.expr(arg))?;
+            let args = self.try_map(call.args, |a, arg| a.expr(arg))?;
             check_all(&f.params, &args)?;
             Ok(Call { target, args, resolved_type: *f.ret })
         } else {
@@ -165,7 +163,7 @@ impl Analyzer {
 
     fn block(&mut self, Block(stmts): Block) -> Result<TypedBlock> {
         self.ctx.push_frame();
-        let stmts = self.all(stmts, |a, stmt| a.stmt(stmt))?;
+        let stmts = self.try_map(stmts, |a, stmt| a.stmt(stmt))?;
         self.ctx.pop_frame();
         Ok(Block(stmts))
     }
@@ -182,7 +180,7 @@ impl Analyzer {
     }
 
     fn program(&mut self, Program { defs }: Program) -> Result<TypedProgram> {
-        let defs = self.all(defs, |a, def| a.def(def))?;
+        let defs = self.try_map(defs, |a, def| a.def(def))?;
         if defs.iter().any(|d| matches!(d, Def::FnDef(f) if &f.name == "main")) {
             Ok(Program { defs })
         } else {
@@ -244,6 +242,7 @@ mod test {
                             resolution: Resolution {
                                 reference: Reference::Global { idx: 0 },
                                 typ: Type::Fn(FnType {
+                                    index: 0,
                                     params: vec![Type::Str],
                                     ret: Box::new(Type::Void),
                                 }),
@@ -262,6 +261,7 @@ mod test {
                         resolved_type: Type::Void,
                     }))]),
                     resolved_type: FnType {
+                        index: 1,
                         params: vec![Type::Str],
                         ret: Box::new(Type::Void),
                     },
@@ -276,6 +276,7 @@ mod test {
                             resolution: Resolution {
                                 reference: Reference::Global { idx: 1 },
                                 typ: Type::Fn(FnType {
+                                    index: 1,
                                     params: vec![Type::Str],
                                     ret: Box::new(Type::Void),
                                 }),
@@ -285,6 +286,7 @@ mod test {
                         resolved_type: Type::Void,
                     }))]),
                     resolved_type: FnType {
+                        index: 2,
                         params: vec![],
                         ret: Box::new(Type::Void),
                     },
@@ -292,10 +294,8 @@ mod test {
             ],
         };
         let mut ctx = SymbolTable::default();
-        ctx.def_global(
-            "println",
-            Type::Fn(FnType { params: vec![Type::Str], ret: Box::new(Type::Void) }),
-        );
+        let println = ctx.def_fn(vec![Type::Str], Type::Void);
+        ctx.def_global("println", Type::Fn(println));
         let actual = Analyzer::with_context(ctx).program(program).unwrap();
         assert_eq!(expected, actual);
     }
@@ -303,22 +303,13 @@ mod test {
     #[test]
     fn test_func() {
         let mut ctx = SymbolTable::default();
-        ctx.def_global(
-            "itoa",
-            Type::Fn(FnType { params: vec![Type::Int], ret: Box::new(Type::Str) }),
-        );
-        ctx.def_global(
-            "join",
-            Type::Fn(FnType {
-                params: vec![Type::Str, Type::Str],
-                ret: Box::new(Type::Str),
-            }),
-        );
+        let itoa = ctx.def_fn(vec![Type::Int], Type::Str);
+        ctx.def_global("itoa", Type::Fn(itoa));
+        let join = ctx.def_fn(vec![Type::Str, Type::Str], Type::Str);
+        ctx.def_global("join", Type::Fn(join));
         ctx.push_frame();
-        ctx.def_local(
-            "println",
-            Type::Fn(FnType { params: vec![Type::Str], ret: Box::new(Type::Void) }),
-        );
+        let println = ctx.def_fn(vec![Type::Str], Type::Void);
+        ctx.def_local("println", Type::Fn(println));
         let input = b"
             fn greet(name: str, age: int) {
                 let age_str: str = itoa(age);
@@ -351,6 +342,7 @@ mod test {
                             resolution: Resolution {
                                 reference: Reference::Global { idx: 0 },
                                 typ: Type::Fn(FnType {
+                                    index: 0,
                                     params: vec![Type::Int],
                                     ret: Box::new(Type::Str),
                                 }),
@@ -379,6 +371,7 @@ mod test {
                             resolution: Resolution {
                                 reference: Reference::Global { idx: 1 },
                                 typ: Type::Fn(FnType {
+                                    index: 1,
                                     params: vec![Type::Str, Type::Str],
                                     ret: Box::new(Type::Str),
                                 }),
@@ -419,6 +412,7 @@ mod test {
                                 frame_idx: 0,
                             },
                             typ: Type::Fn(FnType {
+                                index: 2,
                                 params: vec![Type::Str],
                                 ret: Box::new(Type::Void),
                             }),
@@ -438,6 +432,7 @@ mod test {
                 })),
             ]),
             resolved_type: FnType {
+                index: 3,
                 params: vec![Type::Str, Type::Int],
                 ret: Box::new(Type::Void),
             },
@@ -599,6 +594,7 @@ mod test {
         ctx.def_local(
             String::from("println"),
             Type::Fn(FnType {
+                index: 0,
                 params: vec![Type::Int, Type::Str],
                 ret: Box::new(Type::Void),
             }),

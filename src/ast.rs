@@ -187,6 +187,16 @@ pub enum Expr<AST: ASTSpec = UntypedAST> {
     Binary(Binary<AST>),
 }
 
+impl<AST: ASTSpec> Expr<AST> {
+    pub fn as_ident(self) -> Option<Ident<AST>> {
+        if let Self::Ident(ident) = self {
+            Some(ident)
+        } else {
+            None
+        }
+    }
+}
+
 pub type TypedExpr = Expr<TypedAST>;
 
 impl Typed for TypedExpr {

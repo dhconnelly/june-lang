@@ -12,6 +12,7 @@ pub struct SymbolTable {
     // in the globals table
     globals: HashMap<String, SymbolInfo>,
     frames: Vec<HashMap<String, SymbolInfo>>,
+    functions: Vec<FnType>,
 }
 
 impl SymbolTable {
@@ -26,6 +27,12 @@ impl SymbolTable {
             reference: Reference::Global { idx: *idx },
             typ: typ.clone(),
         })
+    }
+
+    pub fn def_fn(&mut self, params: Vec<Type>, ret: Type) -> FnType {
+        let typ = FnType { index: self.functions.len(), params, ret: Box::new(ret) };
+        self.functions.push(typ.clone());
+        typ
     }
 
     pub fn push_frame(&mut self) {

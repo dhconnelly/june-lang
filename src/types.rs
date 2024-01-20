@@ -1,5 +1,6 @@
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct FnType {
+    pub index: usize,
     pub params: Vec<Type>,
     pub ret: Box<Type>,
 }
@@ -10,6 +11,16 @@ pub enum Type {
     Int,
     Str,
     Fn(FnType),
+}
+
+impl Type {
+    pub fn as_fn(self) -> Option<FnType> {
+        if let Self::Fn(f) = self {
+            Some(f)
+        } else {
+            None
+        }
+    }
 }
 
 pub trait Typed {

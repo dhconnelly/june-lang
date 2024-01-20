@@ -27,7 +27,6 @@ what I think is necessary to solve Advent of Code puzzles.
 - first-class functions
 - subtyping, interfaces
 - generics for user-defined types
-- algebraic data types
 - concurrency
 
 ## TODO
@@ -62,8 +61,9 @@ add features:
 
 refactoring:
 
-- [x] static func type in ast
-- [ ] avoid copies in ast
+- [ ] encode call type invariants in ast
+- [ ] refactor typed ast
+- [ ] avoid copies in ast and parser
 - [ ] just one From<io::Error> in scanner
 - [ ] add back (line, col) tracking
 - [ ] better peek
@@ -72,7 +72,7 @@ refactoring:
 - [ ] improve the algebra
 - [ ] simplify the awful functions
 - [ ] narrow public interface
-- [ ] nicer main.rs w/structopt
+- [ ] nicer main.rs w/structopt?
 - [ ] read and apply https://thume.ca/2019/04/18/writing-a-compiler-in-rust/
 
 productionization:
