@@ -1,7 +1,3 @@
-fn foo(x: int, y: int) {
-    printi(x + y);
-}
-
 fn main() {
-    foo(5, 7);
+    println(5 + 7);
 }

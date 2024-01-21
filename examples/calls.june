@@ -1,0 +1,7 @@
+fn foo(x: int, y: int) {
+    println(x + y);
+}
+
+fn main() {
+    foo(5, 7);
+}

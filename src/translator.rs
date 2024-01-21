@@ -1,6 +1,8 @@
 use crate::ast;
+use crate::ast::TypedDef;
 use crate::builtins;
 use crate::types;
+use crate::types::Typed;
 use crate::wasm;
 use std::result;
 use thiserror::Error;
@@ -20,6 +22,15 @@ impl Default for Translator {
         builtins::install_imports(&mut module);
         Self { module }
     }
+}
+
+fn find_main(defs: &[TypedDef]) -> Option<usize> {
+    defs.iter().find_map(|def| match def {
+        ast::TypedDef::FnDef(func) if func.name == "main" => {
+            Some(func.resolved_type.typ.index)
+        }
+        _ => None,
+    })
 }
 
 impl Translator {
@@ -122,8 +133,10 @@ impl Translator {
         match stmt {
             ast::Stmt::Block(_) => todo!(),
             ast::Stmt::Expr(expr) => {
+                if expr.typ() != types::Type::Void {
+                    body.push(wasm::Instr::Drop);
+                }
                 self.expr(expr, body)?;
-                body.push(wasm::Instr::Drop);
                 Ok(())
             }
             ast::Stmt::Let(lett) => self.let_stmt(lett, body),
@@ -139,6 +152,7 @@ impl Translator {
         for stmt in func.body.0 {
             self.stmt(stmt, &mut body)?;
         }
+        body.push(wasm::Instr::End);
         // TODO: store the types of |locals|
         self.module.code.0.push(wasm::Code {
             locals: vec![wasm::ValType::NumType(wasm::NumType::I64); locals],
@@ -154,6 +168,9 @@ impl Translator {
     }
 
     fn program(&mut self, program: ast::TypedProgram) -> Result<()> {
+        // TODO: encode this in the ast
+        self.module.start.0 =
+            find_main(&program.defs).expect("main not found") as u32;
         for def in program.defs {
             self.def(def)?;
         }
@@ -376,7 +393,7 @@ mod test {
                     wasm::Instr::SetLocal(2),
                     wasm::Instr::GetLocal(2),
                     wasm::Instr::Call(0),
-                    wasm::Instr::Drop,
+                    wasm::Instr::End,
                 ]
             },
             &translator.module.code.0[0]

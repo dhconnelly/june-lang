@@ -27,6 +27,7 @@ pub trait ASTSpec {
     type FuncCargo: fmt::Debug + PartialEq + Eq + Clone;
     type LetCargo: fmt::Debug + PartialEq + Eq + Clone;
     type BinaryCargo: fmt::Debug + PartialEq + Eq + Clone;
+    type ProgramCargo: fmt::Debug + PartialEq + Eq + Clone;
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -40,6 +41,7 @@ impl ASTSpec for UntypedAST {
     type FuncCargo = ();
     type LetCargo = ();
     type BinaryCargo = ();
+    type ProgramCargo = ();
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -53,6 +55,7 @@ impl ASTSpec for TypedAST {
     type FuncCargo = FnDef;
     type LetCargo = LocalBinding;
     type BinaryCargo = Type;
+    type ProgramCargo = usize;
 }
 
 // =============================================================================
@@ -336,6 +339,7 @@ pub type TypedDef = Def<TypedAST>;
 #[derive(Debug, PartialEq, Clone)]
 pub struct Program<AST: ASTSpec = UntypedAST> {
     pub defs: Vec<Def<AST>>,
+    pub main_def: AST::ProgramCargo,
 }
 
 pub type TypedProgram = Program<TypedAST>;

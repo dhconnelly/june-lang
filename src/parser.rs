@@ -185,7 +185,7 @@ impl<R: io::BufRead> Parser<R> {
         while !self.eof() {
             defs.push(self.def()?);
         }
-        Ok(Program { defs })
+        Ok(Program { main_def: (), defs })
     }
 }
 
@@ -208,7 +208,7 @@ mod test {
         ";
         let mut p = parse(input);
         let ast = p.program().unwrap();
-        assert_eq!(Program { defs: Vec::new() }, ast);
+        assert_eq!(Program { main_def: (), defs: Vec::new() }, ast);
     }
 
     #[test]
@@ -371,6 +371,7 @@ mod test {
 
         let ast = parse(input).program().unwrap();
         let expected = Program {
+            main_def: (),
             defs: vec![
                 Def::FnDef(Func::untyped(
                     "foo",

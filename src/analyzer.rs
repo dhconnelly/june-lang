@@ -188,10 +188,12 @@ impl Analyzer {
         }
     }
 
-    fn program(&mut self, Program { defs }: Program) -> Result<TypedProgram> {
+    fn program(&mut self, Program { defs, .. }: Program) -> Result<TypedProgram> {
         let defs = self.try_map(defs, |a, def| a.def(def))?;
-        if defs.iter().any(|d| matches!(d, Def::FnDef(f) if &f.name == "main")) {
-            Ok(Program { defs })
+        if let Some(main_def) =
+            defs.iter().position(|d| matches!(d, Def::FnDef(f) if &f.name == "main"))
+        {
+            Ok(Program { main_def, defs })
         } else {
             Err(Error::NoMain)
         }
@@ -238,6 +240,7 @@ mod test {
         ";
         let program = parse(input).program().unwrap();
         let expected = Program {
+            main_def: 1,
             defs: vec![
                 Def::FnDef(Func {
                     name: String::from("greet"),

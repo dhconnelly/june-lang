@@ -1,6 +1,6 @@
 use crate::analyzer;
+use crate::builtins;
 use crate::emitter;
-use crate::imports;
 use crate::parser;
 use crate::scanner;
 use crate::translator;
@@ -45,10 +45,8 @@ fn make_output_path(p: &path::Path) -> Result<path::PathBuf> {
 pub fn compile<W: io::Write, R: io::Read>(mut w: W, r: R) -> Result<()> {
     let toks = scanner::scan(io::BufReader::new(r));
     let ast = parser::parse(toks)?;
-    // TODO: must inject the imports to the analyzer
     let typed_ast = analyzer::analyze(ast)?;
     let wasm = translator::translate(typed_ast)?;
-    println!("{:#?}", wasm);
     Ok(emitter::emit(&mut w, wasm)?)
 }
 
@@ -67,7 +65,7 @@ pub fn execute<P: AsRef<path::Path>>(input_path: P) -> Result<()> {
     let engine = wasmtime::Engine::default();
     let module = wasmtime::Module::from_file(&engine, input_path)?;
     let mut store = wasmtime::Store::new(&engine, ());
-    let imports = imports::make_imports(&mut store);
+    let imports = builtins::make_imports(&mut store);
     wasmtime::Instance::new(&mut store, &module, &imports)?;
     Ok(())
 }
