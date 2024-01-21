@@ -40,7 +40,7 @@ built-ins for string processing, garbage collection):
 - [x] emitter
 - [x] emit and execute a hand-translated ast
 - [x] wasmtime vm embedding w/external print
-- [ ] translator
+- [x] translator
 - [ ] add strings
 - [ ] generic print
 - [ ] garbage collection
