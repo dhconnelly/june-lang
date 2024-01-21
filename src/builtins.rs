@@ -7,11 +7,7 @@ pub fn install_symbols(ctx: &mut SymbolTable) {
     // TODO: generic println
     ctx.def_global(
         "println",
-        Type::Fn(FnType {
-            index: 0,
-            params: vec![Type::Str],
-            ret: Box::new(Type::Void),
-        }),
+        Type::Fn(FnType { index: 0, params: vec![Type::Str], ret: None }),
     );
 }
 

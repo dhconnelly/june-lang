@@ -173,7 +173,7 @@ impl<R: io::BufRead> Parser<R> {
         self.eat_tok(Token::Rparen)?;
         // TODO: parse return type
         let body = self.block()?;
-        Ok(Func::untyped(name, params, body, TypeSpec::Void))
+        Ok(Func::untyped(name, params, body, None))
     }
 
     pub fn def(&mut self) -> Result<Def> {
@@ -246,10 +246,7 @@ mod test {
             )),
             Expr::Call(Call::untyped(
                 Expr::Ident(Ident::untyped("println")),
-                vec![
-                    Expr::Str(Literal::new("foo")),
-                    Expr::Int(Literal::new(27)),
-                ],
+                vec![Expr::Str(Literal::new("foo")), Expr::Int(Literal::new(27))],
             )),
         ];
         let actual: Vec<Expr> =
@@ -277,8 +274,7 @@ mod test {
     #[test]
     fn test_param() {
         let input = b" foo : bar ";
-        let expected =
-            Param::untyped("foo", TypeSpec::Simple(String::from("bar")));
+        let expected = Param::untyped("foo", TypeSpec::Simple(String::from("bar")));
         let actual = parse(input).param().unwrap();
         assert_eq!(expected, actual);
     }
@@ -355,7 +351,7 @@ mod test {
                 Expr::Ident(Ident::untyped("foo")),
                 vec![Expr::Int(Literal::new(27))],
             )))]),
-            TypeSpec::Void,
+            None,
         );
         let actual = parse(input).fn_expr().unwrap();
         assert_eq!(expected, actual);
@@ -379,14 +375,8 @@ mod test {
                 Def::FnDef(Func::untyped(
                     "foo",
                     vec![
-                        Param::untyped(
-                            "s",
-                            TypeSpec::Simple(String::from("str")),
-                        ),
-                        Param::untyped(
-                            "t",
-                            TypeSpec::Simple(String::from("int")),
-                        ),
+                        Param::untyped("s", TypeSpec::Simple(String::from("str"))),
+                        Param::untyped("t", TypeSpec::Simple(String::from("int"))),
                     ],
                     Block(vec![Stmt::Expr(Expr::Call(Call::untyped(
                         Expr::Ident(Ident::untyped("println")),
@@ -395,7 +385,7 @@ mod test {
                             Expr::Ident(Ident::untyped("t")),
                         ],
                     )))]),
-                    TypeSpec::Void,
+                    None,
                 )),
                 Def::FnDef(Func::untyped(
                     "main",
@@ -404,7 +394,7 @@ mod test {
                         Expr::Ident(Ident::untyped("foo")),
                         vec![Expr::Str(Literal::new("hello, world"))],
                     )))]),
-                    TypeSpec::Void,
+                    None,
                 )),
             ],
         };

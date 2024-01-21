@@ -9,3 +9,6 @@ edition = "2021"
 thiserror = "1.0.50"
 leb128 = "0.2.5"
 wasmtime = "15.0.0"
+
+[dev-dependencies]
+pretty_assertions = "1.4.0"

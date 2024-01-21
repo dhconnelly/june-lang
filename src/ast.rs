@@ -1,5 +1,5 @@
 use crate::token::Op;
-use crate::types::{FnType, Resolution, Type, Typed};
+use crate::types::{FnDef, LocalBinding, Resolution, Type, Typed};
 use std::fmt;
 
 // We have two AST variants: Typed and Untyped. To avoid defining the AST twice
@@ -50,8 +50,8 @@ impl ASTSpec for TypedAST {
     type IdentCargo = Resolution;
     type ExprCargo = Type;
     type ParamCargo = Type;
-    type FuncCargo = FnType;
-    type LetCargo = Type;
+    type FuncCargo = FnDef;
+    type LetCargo = LocalBinding;
     type BinaryCargo = Type;
 }
 
@@ -303,7 +303,7 @@ pub struct Func<AST: ASTSpec = UntypedAST> {
     pub name: String,
     pub params: Vec<Param<AST>>,
     pub body: Block<AST>,
-    pub ret: TypeSpec,
+    pub ret: Option<TypeSpec>,
     pub resolved_type: AST::FuncCargo,
 }
 
@@ -312,19 +312,13 @@ impl Func {
         name: S,
         params: Vec<Param>,
         body: Block,
-        ret: TypeSpec,
+        ret: Option<TypeSpec>,
     ) -> Func {
         Func { name: name.to_string(), params, body, ret, resolved_type: () }
     }
 }
 
 pub type TypedFunc = Func<TypedAST>;
-
-impl Typed for TypedFunc {
-    fn typ(&self) -> Type {
-        Type::Fn(self.resolved_type.clone())
-    }
-}
 
 // =============================================================================
 // Def

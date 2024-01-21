@@ -84,18 +84,22 @@ impl Analyzer {
     }
 
     fn func(&mut self, f: Func) -> Result<TypedFunc> {
+        self.ctx.enter_function();
         let params = self.try_map(f.params, |a, param| a.param(param))?;
         self.ctx.push_frame();
         for param in &params {
             self.ctx.def_local(&param.name, param.resolved_type.clone());
         }
         let body = self.block(f.body)?;
-        let ret = self.resolve_type(&f.ret)?;
+        let ret = f.ret.clone().map(|typ| self.resolve_type(&typ)).transpose()?;
         // TODO: look for return statements when we handle return types
-        let resolved_type =
-            self.ctx.def_fn(params.iter().map(|p| p.typ()).collect(), ret);
+        let resolved_type = FnDef {
+            typ: self.ctx.def_fn(params.iter().map(|p| p.typ()).collect(), ret),
+            locals: self.ctx.num_locals().unwrap() - params.len(),
+        };
         let func = Func { name: f.name, params, body, ret: f.ret, resolved_type };
         self.ctx.pop_frame();
+        self.ctx.exit_function();
         Ok(func)
     }
 
@@ -104,7 +108,7 @@ impl Analyzer {
         if let Type::Fn(f) = target.typ() {
             let args = self.try_map(call.args, |a, arg| a.expr(arg))?;
             check_all(&f.params, &args)?;
-            Ok(Call { target, args, resolved_type: *f.ret })
+            Ok(Call { target, args, resolved_type: f.ret.into() })
         } else {
             Err(Error::InvalidCallable(target.typ()))
         }
@@ -149,8 +153,13 @@ impl Analyzer {
         let typ = self.resolve_type(&stmt.typ)?;
         let expr = self.expr(stmt.expr)?;
         check((&typ, &expr))?;
-        self.ctx.def_local(&stmt.name, typ.clone());
-        Ok(Stmt::Let(Binding::new(stmt.name, stmt.typ, expr, typ)))
+        let idx = self.ctx.def_local(&stmt.name, typ.clone());
+        Ok(Stmt::Let(Binding::new(
+            stmt.name,
+            stmt.typ,
+            expr,
+            LocalBinding { typ, idx },
+        )))
     }
 
     fn stmt(&mut self, stmt: Stmt) -> Result<TypedStmt> {
@@ -173,7 +182,7 @@ impl Analyzer {
             Def::FnDef(f) => {
                 let func = self.func(f)?;
                 let typ = func.resolved_type.clone();
-                self.ctx.def_global(&func.name, Type::Fn(typ));
+                self.ctx.def_global(&func.name, Type::Fn(typ.typ));
                 Ok(Def::FnDef(func))
             }
         }
@@ -198,6 +207,7 @@ mod test {
     use super::*;
     use crate::parser;
     use crate::scanner;
+    use pretty_assertions::assert_eq;
 
     fn parse(input: &[u8]) -> parser::Parser<&[u8]> {
         parser::Parser::new(scanner::scan(input))
@@ -207,10 +217,11 @@ mod test {
         locals: T,
     ) -> Analyzer {
         let mut ctx = SymbolTable::default();
+        ctx.enter_function();
         ctx.push_frame();
-        locals
-            .into_iter()
-            .for_each(|(name, typ)| ctx.def_local(name.to_string(), typ));
+        locals.into_iter().for_each(|(name, typ)| {
+            ctx.def_local(name.to_string(), typ);
+        });
         Analyzer::with_context(ctx)
     }
 
@@ -235,7 +246,7 @@ mod test {
                         typ: TypeSpec::simple("str"),
                         resolved_type: Type::Str,
                     }],
-                    ret: TypeSpec::Void,
+                    ret: None,
                     body: Block(vec![Stmt::Expr(Expr::Call(Call {
                         target: Box::new(Expr::Ident(Ident {
                             name: String::from("println"),
@@ -244,32 +255,28 @@ mod test {
                                 typ: Type::Fn(FnType {
                                     index: 0,
                                     params: vec![Type::Str],
-                                    ret: Box::new(Type::Void),
+                                    ret: None,
                                 }),
                             },
                         })),
                         args: vec![Expr::Ident(Ident {
                             name: String::from("name"),
                             resolution: Resolution {
-                                reference: Reference::Stack {
-                                    frame_depth: 1,
-                                    frame_idx: 0,
-                                },
+                                reference: Reference::Stack { local_idx: 0 },
                                 typ: Type::Str,
                             },
                         })],
                         resolved_type: Type::Void,
                     }))]),
-                    resolved_type: FnType {
-                        index: 1,
-                        params: vec![Type::Str],
-                        ret: Box::new(Type::Void),
+                    resolved_type: FnDef {
+                        typ: FnType { index: 1, params: vec![Type::Str], ret: None },
+                        locals: 0,
                     },
                 }),
                 Def::FnDef(Func {
                     name: String::from("main"),
                     params: vec![],
-                    ret: TypeSpec::Void,
+                    ret: None,
                     body: Block(vec![Stmt::Expr(Expr::Call(Call {
                         target: Box::new(Expr::Ident(Ident {
                             name: String::from("greet"),
@@ -278,23 +285,22 @@ mod test {
                                 typ: Type::Fn(FnType {
                                     index: 1,
                                     params: vec![Type::Str],
-                                    ret: Box::new(Type::Void),
+                                    ret: None,
                                 }),
                             },
                         })),
                         args: vec![Expr::Str(Literal::new("the pope"))],
                         resolved_type: Type::Void,
                     }))]),
-                    resolved_type: FnType {
-                        index: 2,
-                        params: vec![],
-                        ret: Box::new(Type::Void),
+                    resolved_type: FnDef {
+                        typ: FnType { index: 2, params: vec![], ret: None },
+                        locals: 0,
                     },
                 }),
             ],
         };
         let mut ctx = SymbolTable::default();
-        let println = ctx.def_fn(vec![Type::Str], Type::Void);
+        let println = ctx.def_fn(vec![Type::Str], None);
         ctx.def_global("println", Type::Fn(println));
         let actual = Analyzer::with_context(ctx).program(program).unwrap();
         assert_eq!(expected, actual);
@@ -303,13 +309,12 @@ mod test {
     #[test]
     fn test_func() {
         let mut ctx = SymbolTable::default();
-        let itoa = ctx.def_fn(vec![Type::Int], Type::Str);
+        let itoa = ctx.def_fn(vec![Type::Int], Some(Type::Str));
         ctx.def_global("itoa", Type::Fn(itoa));
-        let join = ctx.def_fn(vec![Type::Str, Type::Str], Type::Str);
+        let join = ctx.def_fn(vec![Type::Str, Type::Str], Some(Type::Str));
         ctx.def_global("join", Type::Fn(join));
-        ctx.push_frame();
-        let println = ctx.def_fn(vec![Type::Str], Type::Void);
-        ctx.def_local("println", Type::Fn(println));
+        let println = ctx.def_fn(vec![Type::Str], None);
+        ctx.def_global("println", Type::Fn(println));
         let input = b"
             fn greet(name: str, age: int) {
                 let age_str: str = itoa(age);
@@ -331,7 +336,7 @@ mod test {
                     resolved_type: Type::Int,
                 },
             ],
-            ret: TypeSpec::Void,
+            ret: None,
             body: Block(vec![
                 Stmt::Let(Binding {
                     name: String::from("age_str"),
@@ -344,23 +349,20 @@ mod test {
                                 typ: Type::Fn(FnType {
                                     index: 0,
                                     params: vec![Type::Int],
-                                    ret: Box::new(Type::Str),
+                                    ret: Some(Box::new(Type::Str)),
                                 }),
                             },
                         })),
                         args: vec![Expr::Ident(Ident {
                             name: String::from("age"),
                             resolution: Resolution {
-                                reference: Reference::Stack {
-                                    frame_depth: 1,
-                                    frame_idx: 1,
-                                },
+                                reference: Reference::Stack { local_idx: 1 },
                                 typ: Type::Int,
                             },
                         })],
                         resolved_type: Type::Str,
                     }),
-                    resolved_type: Type::Str,
+                    resolved_type: LocalBinding { typ: Type::Str, idx: 2 },
                 }),
                 Stmt::Let(Binding {
                     name: String::from("greeting"),
@@ -373,7 +375,7 @@ mod test {
                                 typ: Type::Fn(FnType {
                                     index: 1,
                                     params: vec![Type::Str, Type::Str],
-                                    ret: Box::new(Type::Str),
+                                    ret: Some(Box::new(Type::Str)),
                                 }),
                             },
                         })),
@@ -381,60 +383,51 @@ mod test {
                             Expr::Ident(Ident {
                                 name: String::from("name"),
                                 resolution: Resolution {
-                                    reference: Reference::Stack {
-                                        frame_depth: 1,
-                                        frame_idx: 0,
-                                    },
+                                    reference: Reference::Stack { local_idx: 0 },
                                     typ: Type::Str,
                                 },
                             }),
                             Expr::Ident(Ident {
                                 name: String::from("age_str"),
                                 resolution: Resolution {
-                                    reference: Reference::Stack {
-                                        frame_depth: 0,
-                                        frame_idx: 0,
-                                    },
+                                    reference: Reference::Stack { local_idx: 2 },
                                     typ: Type::Str,
                                 },
                             }),
                         ],
                         resolved_type: Type::Str,
                     }),
-                    resolved_type: Type::Str,
+                    resolved_type: LocalBinding { typ: Type::Str, idx: 3 },
                 }),
                 Stmt::Expr(Expr::Call(Call {
                     target: Box::new(Expr::Ident(Ident {
                         name: String::from("println"),
                         resolution: Resolution {
-                            reference: Reference::Stack {
-                                frame_depth: 2,
-                                frame_idx: 0,
-                            },
+                            reference: Reference::Global { idx: 2 },
                             typ: Type::Fn(FnType {
                                 index: 2,
                                 params: vec![Type::Str],
-                                ret: Box::new(Type::Void),
+                                ret: None,
                             }),
                         },
                     })),
                     args: vec![Expr::Ident(Ident {
                         name: String::from("greeting"),
                         resolution: Resolution {
-                            reference: Reference::Stack {
-                                frame_depth: 0,
-                                frame_idx: 1,
-                            },
+                            reference: Reference::Stack { local_idx: 3 },
                             typ: Type::Str,
                         },
                     })],
                     resolved_type: Type::Void,
                 })),
             ]),
-            resolved_type: FnType {
-                index: 3,
-                params: vec![Type::Str, Type::Int],
-                ret: Box::new(Type::Void),
+            resolved_type: FnDef {
+                typ: FnType {
+                    index: 3,
+                    params: vec![Type::Str, Type::Int],
+                    ret: None,
+                },
+                locals: 2,
             },
         };
         let func = parse(input).fn_expr().unwrap();
@@ -491,7 +484,7 @@ mod test {
                 name: String::from("x"),
                 typ: TypeSpec::Simple(String::from("int")),
                 expr: Expr::Int(Literal { value: 7 }),
-                resolved_type: Type::Int,
+                resolved_type: LocalBinding { typ: Type::Int, idx: 0 },
             }),
             Stmt::Let(Binding {
                 name: String::from("y"),
@@ -500,10 +493,10 @@ mod test {
                     name: String::from("x"),
                     resolution: Resolution {
                         typ: Type::Int,
-                        reference: Reference::Stack { frame_depth: 0, frame_idx: 0 },
+                        reference: Reference::Stack { local_idx: 0 },
                     },
                 }),
-                resolved_type: Type::Int,
+                resolved_type: LocalBinding { typ: Type::Int, idx: 1 },
             }),
             Stmt::Block(Block(vec![
                 Stmt::Let(Binding {
@@ -513,13 +506,10 @@ mod test {
                         name: String::from("y"),
                         resolution: Resolution {
                             typ: Type::Int,
-                            reference: Reference::Stack {
-                                frame_depth: 1,
-                                frame_idx: 1,
-                            },
+                            reference: Reference::Stack { local_idx: 1 },
                         },
                     }),
-                    resolved_type: Type::Int,
+                    resolved_type: LocalBinding { typ: Type::Int, idx: 2 },
                 }),
                 Stmt::Let(Binding {
                     name: String::from("y"),
@@ -528,13 +518,10 @@ mod test {
                         name: String::from("x"),
                         resolution: Resolution {
                             typ: Type::Int,
-                            reference: Reference::Stack {
-                                frame_depth: 1,
-                                frame_idx: 0,
-                            },
+                            reference: Reference::Stack { local_idx: 0 },
                         },
                     }),
-                    resolved_type: Type::Int,
+                    resolved_type: LocalBinding { typ: Type::Int, idx: 3 },
                 }),
                 Stmt::Let(Binding {
                     name: String::from("w"),
@@ -543,25 +530,22 @@ mod test {
                         name: String::from("y"),
                         resolution: Resolution {
                             typ: Type::Int,
-                            reference: Reference::Stack {
-                                frame_depth: 0,
-                                frame_idx: 1,
-                            },
+                            reference: Reference::Stack { local_idx: 3 },
                         },
                     }),
-                    resolved_type: Type::Int,
+                    resolved_type: LocalBinding { typ: Type::Int, idx: 4 },
                 }),
                 Stmt::Block(Block(vec![Stmt::Let(Binding {
                     name: String::from("x"),
                     typ: TypeSpec::Simple(String::from("int")),
                     expr: Expr::Int(Literal { value: 7 }),
-                    resolved_type: Type::Int,
+                    resolved_type: LocalBinding { typ: Type::Int, idx: 5 },
                 })])),
                 Stmt::Expr(Expr::Ident(Ident {
                     name: String::from("x"),
                     resolution: Resolution {
                         typ: Type::Int,
-                        reference: Reference::Stack { frame_depth: 1, frame_idx: 0 },
+                        reference: Reference::Stack { local_idx: 0 },
                     },
                 })),
             ])),
@@ -569,12 +553,14 @@ mod test {
                 name: String::from("y"),
                 resolution: Resolution {
                     typ: Type::Int,
-                    reference: Reference::Stack { frame_depth: 0, frame_idx: 1 },
+                    reference: Reference::Stack { local_idx: 1 },
                 },
             })),
         ]);
         let block = parse(input).block().unwrap();
-        let actual = Analyzer::default().block(block).unwrap();
+        let mut analyzer = Analyzer::default();
+        analyzer.ctx.enter_function();
+        let actual = analyzer.block(block).unwrap();
         assert_eq!(expected, actual);
     }
 
@@ -590,13 +576,14 @@ mod test {
     #[test]
     fn test_call() {
         let mut ctx = SymbolTable::default();
+        ctx.enter_function();
         ctx.push_frame();
         ctx.def_local(
             String::from("println"),
             Type::Fn(FnType {
                 index: 0,
                 params: vec![Type::Int, Type::Str],
-                ret: Box::new(Type::Void),
+                ret: None,
             }),
         );
         let inputs: &[&[u8]] = &[
@@ -616,6 +603,7 @@ mod test {
     #[test]
     fn test_ident() {
         let mut ctx = SymbolTable::default();
+        ctx.enter_function();
         ctx.push_frame();
         ctx.def_local(String::from("foo"), Type::Int);
         ctx.def_local(String::from("bar"), Type::Str);

@@ -1,5 +1,6 @@
 use crate::ast;
 use crate::builtins;
+use crate::types;
 use crate::wasm;
 use std::result;
 use thiserror::Error;
@@ -22,7 +23,7 @@ impl Default for Translator {
 }
 
 impl Translator {
-    fn empty() -> Self {
+    fn new() -> Self {
         Self { module: wasm::Module::default() }
     }
 
@@ -74,6 +75,21 @@ impl Translator {
         Ok(())
     }
 
+    fn ident(
+        &self,
+        ident: ast::TypedIdent,
+        instrs: &mut Vec<wasm::Instr>,
+    ) -> Result<()> {
+        match ident.resolution.reference {
+            types::Reference::External => todo!(),
+            types::Reference::Global { .. } => todo!(),
+            types::Reference::Stack { local_idx } => {
+                instrs.push(wasm::Instr::GetLocal(local_idx as u32));
+            }
+        }
+        Ok(())
+    }
+
     fn expr(
         &self,
         expr: ast::TypedExpr,
@@ -83,22 +99,63 @@ impl Translator {
             ast::Expr::Int(int) => self.int_literal(int, instrs),
             ast::Expr::Binary(binary) => self.binary(binary, instrs),
             ast::Expr::Call(call) => self.call(call, instrs),
+            ast::Expr::Ident(ident) => self.ident(ident, instrs),
             _ => todo!(),
         }
     }
 
-    fn func(&mut self, func: ast::TypedFunc) -> Result<()> {
-        // type
-        // func
-        // code
+    fn let_stmt(
+        &mut self,
+        lett: ast::TypedBinding,
+        body: &mut Vec<wasm::Instr>,
+    ) -> Result<()> {
+        self.expr(lett.expr, body)?;
+        body.push(wasm::Instr::SetLocal(lett.resolved_type.idx as u32));
         Ok(())
+    }
+
+    fn stmt(
+        &mut self,
+        stmt: ast::TypedStmt,
+        body: &mut Vec<wasm::Instr>,
+    ) -> Result<()> {
+        match stmt {
+            ast::Stmt::Block(_) => todo!(),
+            ast::Stmt::Expr(expr) => {
+                self.expr(expr, body)?;
+                body.push(wasm::Instr::Drop);
+                Ok(())
+            }
+            ast::Stmt::Let(lett) => self.let_stmt(lett, body),
+        }
+    }
+
+    fn func(&mut self, func: ast::TypedFunc) -> Result<()> {
+        let typeidx = self.module.types.0.len() as u32;
+        let locals = func.resolved_type.locals;
+        self.module.types.0.push(func.resolved_type.into());
+        self.module.funcs.0.push(wasm::Func { typeidx });
+        let mut body = vec![];
+        for stmt in func.body.0 {
+            self.stmt(stmt, &mut body)?;
+        }
+        // TODO: store the types of |locals|
+        self.module.code.0.push(wasm::Code {
+            locals: vec![wasm::ValType::NumType(wasm::NumType::I64); locals],
+            body,
+        });
+        Ok(())
+    }
+
+    fn def(&mut self, def: ast::TypedDef) -> Result<()> {
+        match def {
+            ast::Def::FnDef(func) => self.func(func),
+        }
     }
 
     fn program(&mut self, program: ast::TypedProgram) -> Result<()> {
         for def in program.defs {
-            match def {
-                ast::Def::FnDef(func) => self.func(func)?,
-            }
+            self.def(def)?;
         }
         Ok(())
     }
@@ -157,8 +214,15 @@ mod test {
 
     fn translate_expr(expr: ast::TypedExpr) -> Vec<wasm::Instr> {
         let mut instrs = Vec::new();
-        Translator::empty().expr(expr, &mut instrs).unwrap();
+        Translator::new().expr(expr, &mut instrs).unwrap();
         instrs
+    }
+
+    #[derive(Debug, PartialEq)]
+    struct FuncDefSpec {
+        typ: wasm::FuncType,
+        func: wasm::Func,
+        code: wasm::Code,
     }
 
     #[test]
@@ -193,7 +257,7 @@ mod test {
                     typ: types::Type::Fn(types::FnType {
                         index: 3,
                         params: vec![types::Type::Int, types::Type::Int],
-                        ret: Box::new(types::Type::Int),
+                        ret: Some(Box::new(types::Type::Int)),
                     }),
                     reference: types::Reference::Global { idx: 17 },
                 },
@@ -210,5 +274,112 @@ mod test {
             wasm::Instr::Call(3),
         ];
         assert_eq!(instrs, expected);
+    }
+
+    #[test]
+    fn test_func() {
+        let mut translator = Translator::new();
+        translator
+            .def(ast::TypedDef::FnDef(ast::TypedFunc {
+                name: String::from("print_sum"),
+                params: vec![
+                    ast::Param {
+                        name: String::from("a"),
+                        typ: ast::TypeSpec::simple("int"),
+                        resolved_type: types::Type::Int,
+                    },
+                    ast::Param {
+                        name: String::from("b"),
+                        typ: ast::TypeSpec::simple("int"),
+                        resolved_type: types::Type::Int,
+                    },
+                ],
+                ret: None,
+                resolved_type: types::FnDef {
+                    typ: types::FnType {
+                        index: 1,
+                        params: vec![types::Type::Int, types::Type::Int],
+                        ret: None,
+                    },
+                    locals: 1,
+                },
+                body: ast::Block(vec![
+                    ast::Stmt::Let(ast::Binding::new(
+                        String::from("sum"),
+                        ast::TypeSpec::simple("int"),
+                        ast::Expr::Binary(ast::Binary {
+                            op: ast::BinaryOp::Add,
+                            lhs: Box::new(ast::Expr::Ident(ast::Ident {
+                                name: String::from("a"),
+                                resolution: types::Resolution {
+                                    typ: types::Type::Int,
+                                    reference: types::Reference::Stack {
+                                        local_idx: 0,
+                                    },
+                                },
+                            })),
+                            rhs: Box::new(ast::Expr::Ident(ast::Ident {
+                                name: String::from("b"),
+                                resolution: types::Resolution {
+                                    typ: types::Type::Int,
+                                    reference: types::Reference::Stack {
+                                        local_idx: 1,
+                                    },
+                                },
+                            })),
+                            cargo: types::Type::Int,
+                        }),
+                        types::LocalBinding { typ: types::Type::Int, idx: 2 },
+                    )),
+                    ast::Stmt::Expr(ast::Expr::Call(ast::Call {
+                        target: Box::new(ast::Expr::Ident(ast::Ident {
+                            name: String::from("println"),
+                            resolution: types::Resolution {
+                                reference: types::Reference::External,
+                                typ: types::Type::Fn(types::FnType {
+                                    index: 0,
+                                    params: vec![types::Type::Int],
+                                    ret: None,
+                                }),
+                            },
+                        })),
+                        args: vec![ast::Expr::Ident(ast::Ident {
+                            name: String::from("sum"),
+                            resolution: types::Resolution {
+                                typ: types::Type::Int,
+                                reference: types::Reference::Stack { local_idx: 2 },
+                            },
+                        })],
+                        resolved_type: types::Type::Void,
+                    })),
+                ]),
+            }))
+            .unwrap();
+        assert_eq!(
+            vec![wasm::FuncType {
+                params: vec![
+                    wasm::ValType::NumType(wasm::NumType::I64),
+                    wasm::ValType::NumType(wasm::NumType::I64)
+                ],
+                results: vec![]
+            }],
+            translator.module.types.0,
+        );
+        assert_eq!(vec![wasm::Func { typeidx: 0 }], translator.module.funcs.0);
+        assert_eq!(
+            &wasm::Code {
+                locals: vec![wasm::ValType::NumType(wasm::NumType::I64),],
+                body: vec![
+                    wasm::Instr::GetLocal(0),
+                    wasm::Instr::GetLocal(1),
+                    wasm::Instr::AddI64,
+                    wasm::Instr::SetLocal(2),
+                    wasm::Instr::GetLocal(2),
+                    wasm::Instr::Call(0),
+                    wasm::Instr::Drop,
+                ]
+            },
+            &translator.module.code.0[0]
+        );
     }
 }

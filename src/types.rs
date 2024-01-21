@@ -2,7 +2,13 @@
 pub struct FnType {
     pub index: usize,
     pub params: Vec<Type>,
-    pub ret: Box<Type>,
+    pub ret: Option<Box<Type>>,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct FnDef {
+    pub typ: FnType,
+    pub locals: usize,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -11,6 +17,15 @@ pub enum Type {
     Int,
     Str,
     Fn(FnType),
+}
+
+impl From<Option<Box<Type>>> for Type {
+    fn from(value: Option<Box<Type>>) -> Self {
+        match value {
+            None => Type::Void,
+            Some(typ) => *typ,
+        }
+    }
 }
 
 impl Type {
@@ -29,8 +44,15 @@ pub trait Typed {
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Reference {
+    External,
     Global { idx: usize },
-    Stack { frame_depth: usize, frame_idx: usize },
+    Stack { local_idx: usize },
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct LocalBinding {
+    pub typ: Type,
+    pub idx: usize,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]

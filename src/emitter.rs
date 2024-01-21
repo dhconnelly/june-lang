@@ -101,6 +101,10 @@ impl<W: Write> Writable<W> for Instr {
                 w.write_all(&[0x10])?;
                 idx.write(w)?;
             }
+            Instr::SetLocal(idx) => {
+                w.write_all(&[0x21])?;
+                idx.write(w)?;
+            }
             Instr::GetLocal(idx) => {
                 w.write_all(&[0x20])?;
                 idx.write(w)?;
