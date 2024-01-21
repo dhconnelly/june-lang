@@ -58,6 +58,8 @@ add features:
 - [ ] maps
 - [ ] sets
 - [ ] file i/o
+- [ ] benchmarks
+- [ ] integration tests
 
 refactoring:
 
@@ -74,6 +76,8 @@ refactoring:
 - [ ] narrow public interface
 - [ ] nicer main.rs w/structopt?
 - [ ] read and apply https://thume.ca/2019/04/18/writing-a-compiler-in-rust/
+- [ ] read and apply "rust for rustaceans" book
+- [ ] profiling and optimization
 
 productionization:
 
@@ -106,14 +110,13 @@ To use a pre-built release:
 
 ## Usage
 
-    junec examples/hello.june
-    junevm examples/hello.wasm
+    june examples/hello.june
 
 For more usage information, run `junec --help`. For examples, see `examples/`.
 
 ## Previous work and references
 
-For more details on wasm, wasi, and wasmtime:
+For more details on wasm and wasmtime:
 
 -   [WebAssembly Specification](https://webassembly.github.io/spec/core/)
 -   [Wasmtime documentation](https://docs.wasmtime.dev/)
