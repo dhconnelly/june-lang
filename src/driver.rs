@@ -42,7 +42,7 @@ fn make_output_path(p: &path::Path) -> Result<path::PathBuf> {
     }
 }
 
-pub fn compile<W: io::Write, R: io::Read>(mut w: W, r: R) -> Result<()> {
+fn compile<W: io::Write, R: io::Read>(mut w: W, r: R) -> Result<()> {
     let toks = scanner::scan(io::BufReader::new(r));
     let ast = parser::parse(toks)?;
     let typed_ast = analyzer::analyze(ast)?;
@@ -61,11 +61,29 @@ pub fn compile_file<P: Into<path::PathBuf>>(input_path: P) -> Result<()> {
     compile(w, r)
 }
 
-pub fn execute<P: AsRef<path::Path>>(input_path: P) -> Result<()> {
-    let engine = wasmtime::Engine::default();
-    let module = wasmtime::Module::from_file(&engine, input_path)?;
+fn execute_wasm(engine: &wasmtime::Engine, module: &wasmtime::Module) -> Result<()> {
     let mut store = wasmtime::Store::new(&engine, ());
     let imports = builtins::make_imports(&mut store);
     wasmtime::Instance::new(&mut store, &module, &imports)?;
     Ok(())
+}
+
+pub fn execute_file<P: AsRef<path::Path>>(input_path: P) -> Result<()> {
+    let engine = wasmtime::Engine::default();
+    let module = wasmtime::Module::from_file(&engine, input_path)?;
+    execute_wasm(&engine, &module)
+}
+
+pub fn evaluate_file<P: Into<path::PathBuf>>(input_path: P) -> Result<()> {
+    let path: path::PathBuf = input_path.into();
+    compile_file(&path)?;
+    execute_file(path.with_extension("wasm"))
+}
+
+pub fn evaluate_program(program: &[u8]) -> Result<()> {
+    let mut bin: Vec<u8> = Vec::new();
+    compile(&mut bin, program)?;
+    let engine = wasmtime::Engine::default();
+    let module = wasmtime::Module::from_binary(&engine, &bin)?;
+    execute_wasm(&engine, &module)
 }

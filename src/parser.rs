@@ -19,11 +19,11 @@ pub enum Error {
 
 type Result<T> = result::Result<T, Error>;
 
-pub struct Parser<R: io::BufRead> {
+pub struct Parser<R: io::Read> {
     scanner: iter::Peekable<scanner::Scanner<R>>,
 }
 
-impl<R: io::BufRead> Parser<R> {
+impl<R: io::Read> Parser<R> {
     pub fn new(scanner: scanner::Scanner<R>) -> Parser<R> {
         Parser { scanner: scanner.peekable() }
     }
@@ -189,7 +189,7 @@ impl<R: io::BufRead> Parser<R> {
     }
 }
 
-pub fn parse<R: io::BufRead>(scanner: scanner::Scanner<R>) -> Result<Program> {
+pub fn parse<R: io::Read>(scanner: scanner::Scanner<R>) -> Result<Program> {
     Parser::new(scanner).program()
 }
 

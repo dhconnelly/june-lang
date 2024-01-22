@@ -29,7 +29,7 @@ impl From<&io::Error> for Error {
 
 type Result<T> = result::Result<T, Error>;
 
-pub struct Scanner<R: io::BufRead> {
+pub struct Scanner<R: io::Read> {
     bytes: iter::Peekable<io::Bytes<R>>,
 }
 
@@ -37,7 +37,7 @@ fn is_delim(b: u8) -> bool {
     !b.is_ascii_alphanumeric() && b != b'_'
 }
 
-impl<R: io::BufRead> Scanner<R> {
+impl<R: io::Read> Scanner<R> {
     fn peek(&mut self) -> Option<Result<u8>> {
         let peeked = self.bytes.peek()?;
         let result = peeked.as_ref().map_err(Error::from).map(|ch| *ch);
@@ -105,12 +105,13 @@ impl<R: io::BufRead> Scanner<R> {
     }
 }
 
-impl<R: io::BufRead> iter::Iterator for Scanner<R> {
+impl<R: io::Read> iter::Iterator for Scanner<R> {
     type Item = result::Result<Token, Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.skip_whitespace();
-        let result = self.peek()?.and_then(|b| match b {
+        let b = self.peek().transpose().ok()??;
+        let result = match b {
             b'+' => self.eat_as(b"+", Token::Op(Op::Plus)),
             b'=' => self.eat_as(b"=", Token::Eq),
             b'(' => self.eat_as(b"(", Token::Lparen),
@@ -121,15 +122,27 @@ impl<R: io::BufRead> iter::Iterator for Scanner<R> {
             b';' => self.eat_as(b";", Token::Semi),
             b':' => self.eat_as(b":", Token::Colon),
             b'"' => self.str(),
+            b'/' => {
+                self.advance().unwrap();
+                if let Some(Ok(b'/')) = self.peek() {
+                    self.advance().unwrap();
+                    match self.advance_while(|b| b != b'\n') {
+                        Ok(_) => return self.next(),
+                        Err(err) => Err(err),
+                    }
+                } else {
+                    Ok(Token::Op(Op::Slash))
+                }
+            }
             b if b.is_ascii_digit() => self.int(),
             b if b.is_ascii_alphabetic() => self.keyword_or_ident(),
             b => Err(Error::UnknownToken(b)),
-        });
+        };
         Some(result)
     }
 }
 
-pub fn scan<R: io::BufRead>(r: R) -> Scanner<R> {
+pub fn scan<R: io::Read>(r: R) -> Scanner<R> {
     Scanner { bytes: r.bytes().peekable() }
 }
 

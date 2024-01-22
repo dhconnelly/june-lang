@@ -44,6 +44,7 @@ built-ins for string processing, garbage collection):
 - [ ] add strings
 - [ ] generic print
 - [ ] garbage collection
+- [ ] add logging
 
 add features:
 

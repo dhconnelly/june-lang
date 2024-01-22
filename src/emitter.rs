@@ -117,7 +117,15 @@ impl<W: Write> Writable<W> for Instr {
 impl<W: Write> Writable<W> for Code {
     fn write(&self, w: &mut W) -> Result<()> {
         let mut buf = Vec::new();
-        vec(&mut buf, &self.locals)?;
+        // the locals are actually vec<vec<local>> in order to optimize
+        // for having many variables of the same type :eyeroll:
+        // https://webassembly.github.io/spec/core/binary/modules.html#code-section
+        // here i don't care about this, we'll just make it n vecs of length 1
+        write_len(&mut buf, self.locals.len())?;
+        for local in &self.locals {
+            write_len(&mut buf, 1)?;
+            local.write(&mut buf)?;
+        }
         for instr in &self.body {
             instr.write(&mut buf)?;
         }
